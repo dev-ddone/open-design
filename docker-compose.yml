@@ -32,7 +32,7 @@ services:
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
       ICONIFY_API_URL: ${ICONIFY_API_URL:-https://api.iconify.design}
       ICONIFY_COLLECTIONS: ${ICONIFY_COLLECTIONS:-tabler,ph,heroicons,bi,material-symbols}
-      ELEMENTS_PROVIDERS: ${ELEMENTS_PROVIDERS:-builtin,uploads,iconify,openverse,wikimedia}
+      ELEMENTS_PROVIDERS: ${ELEMENTS_PROVIDERS:-builtin,uploads,iconify,openverse,wikimedia,pexels,pixabay,freesound,jamendo,sketchfab}
       ELEMENTS_CACHE_TTL_SECONDS: ${ELEMENTS_CACHE_TTL_SECONDS:-900}
       ELEMENTS_REQUEST_TIMEOUT_MS: ${ELEMENTS_REQUEST_TIMEOUT_MS:-8000}
       ELEMENTS_MAX_PER_PROVIDER: ${ELEMENTS_MAX_PER_PROVIDER:-48}
@@ -42,6 +42,18 @@ services:
       OPENVERSE_API_TOKEN: ${OPENVERSE_API_TOKEN:-}
       OPENVERSE_LICENSES: ${OPENVERSE_LICENSES:-cc0,pdm,by,by-sa}
       WIKIMEDIA_API_URL: ${WIKIMEDIA_API_URL:-https://commons.wikimedia.org/w/api.php}
+      PEXELS_API_URL: ${PEXELS_API_URL:-https://api.pexels.com}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PIXABAY_API_URL: ${PIXABAY_API_URL:-https://pixabay.com/api/}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
+      GIPHY_API_URL: ${GIPHY_API_URL:-https://api.giphy.com/v1}
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
+      FREESOUND_API_URL: ${FREESOUND_API_URL:-https://freesound.org/apiv2}
+      FREESOUND_API_TOKEN: ${FREESOUND_API_TOKEN:-}
+      JAMENDO_API_URL: ${JAMENDO_API_URL:-https://api.jamendo.com/v3.0}
+      JAMENDO_CLIENT_ID: ${JAMENDO_CLIENT_ID:-}
+      SKETCHFAB_API_URL: ${SKETCHFAB_API_URL:-https://api.sketchfab.com/v3}
+      SKETCHFAB_API_TOKEN: ${SKETCHFAB_API_TOKEN:-}
       ELEMENT_PACK_URLS: ${ELEMENT_PACK_URLS:-}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@ddone.it}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
