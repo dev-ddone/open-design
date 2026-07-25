@@ -72,6 +72,13 @@ jobs:
           set -o pipefail
           pnpm typecheck 2>&1 | tee typecheck.log
 
+      - name: Openverse OAuth2 token lifecycle smoke test
+        id: openverse-auth-smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm exec tsx scripts/openverse-auth-smoke.ts 2>&1 | tee openverse-auth-smoke.log
+
       - name: Build frontend
         id: frontend-build
         shell: bash
@@ -174,6 +181,7 @@ jobs:
           path: |
             pnpm-lock.yaml
             typecheck.log
+            openverse-auth-smoke.log
             frontend-build.log
             runtime.log
             realtime-smoke.log
