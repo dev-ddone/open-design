@@ -47,16 +47,30 @@ export function WorkspaceBar() {
         setClients(items);
         const stored = getActiveClientId();
         const selected = stored ? items.find((item) => item.id === stored) : null;
+        const requiresClientSelection = !activeOrganization.all_clients && !canManage;
+
+        if (requiresClientSelection && !selected && items.length > 0) {
+          const firstPermittedClient = items[0];
+          setActiveClientId(firstPermittedClient.id);
+          setActiveClientRole(firstPermittedClient.access_role ?? "VIEWER");
+          setActiveClientState(firstPermittedClient.id);
+          // The parent application derives its read-only state from this persisted scope.
+          // Reload once so every initial API request uses the selected client consistently.
+          window.location.replace("/");
+          return;
+        }
+
         if (stored && !selected) {
           setActiveClientId(null);
           setActiveClientRole(null);
           setActiveClientState(null);
         } else {
           setActiveClientRole(selected?.access_role ?? null);
+          setActiveClientState(selected?.id ?? null);
         }
       })
       .catch((error) => console.error("Unable to load clients", error));
-  }, [activeOrganization?.id]);
+  }, [activeOrganization?.id, activeOrganization?.all_clients, canManage]);
 
   const selectClient = (id: string) => {
     const value = id || null;
