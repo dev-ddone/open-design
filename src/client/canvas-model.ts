@@ -32,7 +32,10 @@ export function serializeObject(object: fabric.FabricObject): Record<string, unk
 
 export function serializeCanvas(canvas: fabric.Canvas): string {
   ensureCanvasObjectIds(canvas);
-  return JSON.stringify(canvas.toJSON([...EXTRA_OBJECT_PROPERTIES] as unknown as string[]));
+  const serialized = (canvas as unknown as {
+    toJSON(propertiesToInclude?: string[]): Record<string, unknown>;
+  }).toJSON([...EXTRA_OBJECT_PROPERTIES]);
+  return JSON.stringify(serialized);
 }
 
 export function normalizeEditRules(value: TemplateEditRules | null | undefined): TemplateEditRules {
