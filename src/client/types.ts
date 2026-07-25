@@ -84,17 +84,31 @@ export interface BrandKit {
 
 export type ElementCategory =
   | "all"
+  | "shapes"
   | "icons"
+  | "graphics"
   | "illustrations"
   | "photos"
+  | "animations"
+  | "videos"
+  | "audio"
   | "emoji"
   | "ornaments"
   | "frames"
+  | "grids"
+  | "charts"
+  | "tables"
+  | "modules"
+  | "mockups"
+  | "models3d"
   | "food"
   | "cocktails"
   | "backgrounds"
   | "social"
   | "patterns";
+
+export type ElementKind = "vector" | "image" | "gif" | "video" | "audio" | "model";
+export type ElementFormat = "svg" | "png" | "jpg" | "webp" | "gif" | "mp4" | "mp3" | "wav" | "glb" | "gltf" | "other";
 
 export interface DesignElement {
   id: string;
@@ -103,7 +117,10 @@ export interface DesignElement {
   tags: string[];
   provider: string;
   providerLabel: string;
-  kind: "vector" | "image";
+  kind: ElementKind;
+  format?: ElementFormat;
+  transparent?: boolean;
+  duration?: number;
   license: string;
   licenseUrl?: string;
   author?: string;
@@ -123,7 +140,7 @@ export interface ElementProvider {
   label: string;
   description: string;
   enabled: boolean;
-  capabilities: Array<"vector" | "image">;
+  capabilities: ElementKind[];
   attribution: string;
 }
 
