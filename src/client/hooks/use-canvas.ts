@@ -1,16 +1,19 @@
 import { useState, useCallback, useRef, useEffect } from "preact/hooks";
 import * as fabric from "fabric";
 import { jsPDF } from "jspdf";
+import type { CropAspect, CropState } from "../context";
 import type { Template, TemplateEditRules } from "../types";
 import {
   applyEditRules,
   ensureObjectId,
+  EXTRA_OBJECT_PROPERTIES,
   normalizeEditRules,
   rulesFromCanvas,
   serializeCanvas,
   setObjectTemplateLock,
   type DDoneFabricObject,
 } from "../canvas-model";
+import { recolorVectorObject } from "../canvas/media-effects";
 
 const MAX_HISTORY = 50;
 
@@ -27,9 +30,41 @@ const SHAPE_DEFAULTS = {
   opacity: 1,
 };
 
+const EMPTY_CROP_STATE: CropState = {
+  active: false,
+  objectId: null,
+  aspect: "free",
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  rotation: 0,
+};
+
 interface CanvasHistory {
   entries: string[];
   index: number;
+}
+
+interface CropSnapshot {
+  image: fabric.FabricImage;
+  center: fabric.Point;
+  sourceWidth: number;
+  sourceHeight: number;
+  renderedWidth: number;
+  renderedHeight: number;
+  properties: {
+    cropX: number;
+    cropY: number;
+    width: number;
+    height: number;
+    scaleX: number;
+    scaleY: number;
+    angle: number;
+    left: number;
+    top: number;
+    originX: fabric.TOriginX;
+    originY: fabric.TOriginY;
+  };
 }
 
 function downloadBlob(blob: Blob, filename: string): void {
@@ -45,6 +80,30 @@ function safeFilename(input: string): string {
   return input.trim().replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "") || "design";
 }
 
+function sourceDimensions(image: fabric.FabricImage): { width: number; height: number } {
+  const element = image.getElement() as any;
+  return {
+    width: Number(element?.naturalWidth || element?.videoWidth || element?.width || image.width || 1),
+    height: Number(element?.naturalHeight || element?.videoHeight || element?.height || image.height || 1),
+  };
+}
+
+function aspectRatio(aspect: CropAspect, snapshot: CropSnapshot): number {
+  if (aspect === "original") return snapshot.sourceWidth / snapshot.sourceHeight;
+  if (aspect === "1:1") return 1;
+  if (aspect === "4:5") return 4 / 5;
+  if (aspect === "16:9") return 16 / 9;
+  return snapshot.properties.width / snapshot.properties.height;
+}
+
+function cropBaseSize(snapshot: CropSnapshot, aspect: CropAspect): { width: number; height: number } {
+  const ratio = aspectRatio(aspect, snapshot);
+  if (snapshot.sourceWidth / snapshot.sourceHeight > ratio) {
+    return { width: snapshot.sourceHeight * ratio, height: snapshot.sourceHeight };
+  }
+  return { width: snapshot.sourceWidth, height: snapshot.sourceWidth / ratio };
+}
+
 export function useCanvasState() {
   const canvasMapRef = useRef<Map<string, fabric.Canvas>>(new Map());
   const historyMapRef = useRef<Map<string, CanvasHistory>>(new Map());
@@ -57,6 +116,8 @@ export function useCanvasState() {
   const [fitScale, setFitScale] = useState(0.58);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [cropState, setCropState] = useState<CropState>(EMPTY_CROP_STATE);
+  const cropSnapshotRef = useRef<CropSnapshot | null>(null);
   const [templateEditRules, setTemplateEditRulesState] = useState<TemplateEditRules>(
     normalizeEditRules(undefined),
   );
@@ -94,23 +155,32 @@ export function useCanvasState() {
     updateUndoRedoState(pageId);
   }, [updateUndoRedoState]);
 
+  const refreshSelectedObject = useCallback((target: fabric.FabricObject | null) => {
+    setSelectedObject(null);
+    queueMicrotask(() => setSelectedObject(target));
+  }, []);
+
   const registerCanvas = useCallback((pageId: string, canvas: fabric.Canvas) => {
     canvasMapRef.current.set(pageId, canvas);
 
     const select = (event: any) => {
       if (activeCanvasIdRef.current === pageId) setSelectedObject(event.selected?.[0] ?? null);
     };
+    const clearSelection = () => {
+      if (activeCanvasIdRef.current === pageId && !cropSnapshotRef.current) setSelectedObject(null);
+    };
     canvas.on("selection:created", select);
     canvas.on("selection:updated", select);
-    canvas.on("selection:cleared", () => {
-      if (activeCanvasIdRef.current === pageId) setSelectedObject(null);
-    });
+    canvas.on("selection:cleared", clearSelection);
     canvas.on("object:added", (event) => {
       if (event.target) ensureObjectId(event.target);
       applyEditRules(canvas, templateRulesRef.current, forceReadOnlyRef.current);
       saveHistory(pageId);
     });
-    canvas.on("object:modified", () => saveHistory(pageId));
+    canvas.on("object:modified", (event) => {
+      saveHistory(pageId);
+      if (event.target && activeCanvasIdRef.current === pageId) refreshSelectedObject(event.target);
+    });
     canvas.on("object:removed", () => saveHistory(pageId));
     canvas.on("text:changed", () => saveHistory(pageId));
 
@@ -120,7 +190,7 @@ export function useCanvasState() {
       historyMapRef.current.set(pageId, { entries: [json], index: 0 });
       updateUndoRedoState(pageId);
     }, 100);
-  }, [saveHistory, updateUndoRedoState]);
+  }, [saveHistory, updateUndoRedoState, refreshSelectedObject]);
 
   const unregisterCanvas = useCallback((pageId: string) => {
     canvasMapRef.current.delete(pageId);
@@ -130,6 +200,8 @@ export function useCanvasState() {
   const setActiveCanvas = useCallback((pageId: string) => {
     const previousId = activeCanvasIdRef.current;
     if (previousId === pageId) return;
+    cropSnapshotRef.current = null;
+    setCropState(EMPTY_CROP_STATE);
     if (previousId) {
       const previousCanvas = canvasMapRef.current.get(previousId);
       previousCanvas?.discardActiveObject();
@@ -207,6 +279,9 @@ export function useCanvasState() {
         scaleX: scale,
         scaleY: scale,
       });
+      const metadata = image as DDoneFabricObject;
+      metadata.ddoneMediaKind = "image";
+      metadata.ddoneMediaUrl = url;
       ensureObjectId(image);
       canvas.add(image);
       canvas.setActiveObject(image);
@@ -232,8 +307,11 @@ export function useCanvasState() {
       image.set({ left: 0, top: 0, scaleX, scaleY, selectable: false, evented: false });
       const oldBackground = canvas.getObjects().find((object) => (object as DDoneFabricObject)._isBgImage);
       if (oldBackground) canvas.remove(oldBackground);
-      (image as DDoneFabricObject)._isBgImage = true;
-      (image as DDoneFabricObject).templateLocked = true;
+      const metadata = image as DDoneFabricObject;
+      metadata._isBgImage = true;
+      metadata.templateLocked = true;
+      metadata.ddoneMediaKind = "image";
+      metadata.ddoneMediaUrl = value;
       ensureObjectId(image);
       canvas.add(image);
       canvas.sendObjectToBack(image);
@@ -245,12 +323,15 @@ export function useCanvasState() {
   const updateSelectedObject = useCallback((properties: Record<string, unknown>) => {
     const canvas = getActiveCanvas();
     const pageId = activeCanvasIdRef.current;
-    if (!canvas || !selectedObject || !pageId || !selectedObject.selectable) return;
-    selectedObject.set(properties as Partial<fabric.FabricObject>);
+    const target = canvas?.getActiveObject() ?? selectedObject;
+    if (!canvas || !target || !pageId || !target.selectable) return;
+    target.set(properties as Partial<fabric.FabricObject>);
+    target.setCoords();
     canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
     saveHistory(pageId);
-    setSelectedObject({ ...selectedObject } as fabric.FabricObject);
-  }, [getActiveCanvas, selectedObject, saveHistory]);
+    refreshSelectedObject(target);
+  }, [getActiveCanvas, selectedObject, saveHistory, refreshSelectedObject]);
 
   const deleteSelected = useCallback(() => {
     const canvas = getActiveCanvas();
@@ -261,10 +342,195 @@ export function useCanvasState() {
     canvas.requestRenderAll();
   }, [getActiveCanvas]);
 
+  const duplicateSelected = useCallback(async () => {
+    const canvas = getActiveCanvas();
+    if (!canvas || forceReadOnlyRef.current) return;
+    const active = canvas.getActiveObject();
+    if (!active) return;
+    const clone = await active.clone([...EXTRA_OBJECT_PROPERTIES] as unknown as string[]);
+    const metadata = clone as DDoneFabricObject;
+    metadata.ddoneId = undefined;
+    ensureObjectId(clone);
+    clone.set({ left: (active.left ?? 0) + 24, top: (active.top ?? 0) + 24 });
+    canvas.add(clone);
+    canvas.setActiveObject(clone);
+    canvas.requestRenderAll();
+  }, [getActiveCanvas]);
+
+  const arrangeSelected = useCallback((direction: "front" | "forward" | "backward" | "back") => {
+    const canvas = getActiveCanvas();
+    const target = canvas?.getActiveObject();
+    if (!canvas || !target || forceReadOnlyRef.current) return;
+    const api = canvas as any;
+    if (direction === "front") api.bringObjectToFront?.(target);
+    if (direction === "forward") api.bringObjectForward?.(target);
+    if (direction === "backward") api.sendObjectBackwards?.(target);
+    if (direction === "back") api.sendObjectToBack?.(target);
+    canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
+  }, [getActiveCanvas]);
+
+  const flipSelected = useCallback((axis: "x" | "y") => {
+    const canvas = getActiveCanvas();
+    const target = canvas?.getActiveObject();
+    if (!canvas || !target || forceReadOnlyRef.current) return;
+    target.set(axis === "x" ? { flipX: !target.flipX } : { flipY: !target.flipY });
+    target.setCoords();
+    canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
+  }, [getActiveCanvas]);
+
+  const toggleSelectedLock = useCallback(() => {
+    const canvas = getActiveCanvas();
+    const target = canvas?.getActiveObject();
+    if (!canvas || !target || forceReadOnlyRef.current) return;
+    const locked = Boolean(target.lockMovementX && target.lockMovementY && target.lockScalingX && target.lockScalingY);
+    target.set({
+      lockMovementX: !locked,
+      lockMovementY: !locked,
+      lockScalingX: !locked,
+      lockScalingY: !locked,
+      lockRotation: !locked,
+      hasControls: locked,
+      hoverCursor: locked ? "move" : "default",
+    });
+    canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
+    refreshSelectedObject(target);
+  }, [getActiveCanvas, refreshSelectedObject]);
+
+  const recolorSelectedVector = useCallback((color: string) => {
+    const canvas = getActiveCanvas();
+    const target = canvas?.getActiveObject();
+    if (!canvas || !target || forceReadOnlyRef.current) return;
+    if (recolorVectorObject(target, color) === 0) return;
+    canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
+    refreshSelectedObject(target);
+  }, [getActiveCanvas, refreshSelectedObject]);
+
+  const applyCropState = useCallback((state: CropState) => {
+    const canvas = getActiveCanvas();
+    const snapshot = cropSnapshotRef.current;
+    if (!canvas || !snapshot) return;
+    const image = snapshot.image;
+    const base = cropBaseSize(snapshot, state.aspect);
+    const zoomFactor = Math.max(1, Math.min(4, state.zoom));
+    const width = Math.max(1, base.width / zoomFactor);
+    const height = Math.max(1, base.height / zoomFactor);
+    const maxX = Math.max(0, snapshot.sourceWidth - width);
+    const maxY = Math.max(0, snapshot.sourceHeight - height);
+    const cropX = maxX * ((Math.max(-1, Math.min(1, state.offsetX)) + 1) / 2);
+    const cropY = maxY * ((Math.max(-1, Math.min(1, state.offsetY)) + 1) / 2);
+    const ratio = width / height;
+    let renderedWidth = snapshot.renderedWidth;
+    let renderedHeight = renderedWidth / ratio;
+    if (renderedHeight > snapshot.renderedHeight) {
+      renderedHeight = snapshot.renderedHeight;
+      renderedWidth = renderedHeight * ratio;
+    }
+
+    image.set({
+      cropX,
+      cropY,
+      width,
+      height,
+      scaleX: renderedWidth / width,
+      scaleY: renderedHeight / height,
+      angle: state.rotation,
+    });
+    image.setPositionByOrigin(snapshot.center, "center", "center");
+    image.setCoords();
+    canvas.requestRenderAll();
+    refreshSelectedObject(image);
+  }, [getActiveCanvas, refreshSelectedObject]);
+
+  const beginCrop = useCallback((provided?: fabric.FabricImage | null) => {
+    const canvas = getActiveCanvas();
+    const active = provided ?? (canvas?.getActiveObject() instanceof fabric.FabricImage
+      ? canvas.getActiveObject() as fabric.FabricImage
+      : null);
+    if (!canvas || !active || forceReadOnlyRef.current) return;
+    const source = sourceDimensions(active);
+    const id = ensureObjectId(active);
+    cropSnapshotRef.current = {
+      image: active,
+      center: active.getCenterPoint(),
+      sourceWidth: source.width,
+      sourceHeight: source.height,
+      renderedWidth: active.getScaledWidth(),
+      renderedHeight: active.getScaledHeight(),
+      properties: {
+        cropX: active.cropX ?? 0,
+        cropY: active.cropY ?? 0,
+        width: active.width || source.width,
+        height: active.height || source.height,
+        scaleX: active.scaleX ?? 1,
+        scaleY: active.scaleY ?? 1,
+        angle: active.angle ?? 0,
+        left: active.left ?? 0,
+        top: active.top ?? 0,
+        originX: active.originX,
+        originY: active.originY,
+      },
+    };
+    const state: CropState = {
+      active: true,
+      objectId: id,
+      aspect: "free",
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+      rotation: active.angle ?? 0,
+    };
+    setCropState(state);
+    canvas.setActiveObject(active);
+    canvas.requestRenderAll();
+  }, [getActiveCanvas]);
+
+  const updateCrop = useCallback((changes: Partial<Omit<CropState, "active" | "objectId">>) => {
+    setCropState((current) => {
+      if (!current.active) return current;
+      const next = { ...current, ...changes };
+      applyCropState(next);
+      return next;
+    });
+  }, [applyCropState]);
+
+  const applyCrop = useCallback(() => {
+    const canvas = getActiveCanvas();
+    const pageId = activeCanvasIdRef.current;
+    const snapshot = cropSnapshotRef.current;
+    if (!canvas || !pageId || !snapshot) return;
+    canvas.fire("object:modified", { target: snapshot.image } as any);
+    saveHistory(pageId);
+    cropSnapshotRef.current = null;
+    setCropState(EMPTY_CROP_STATE);
+    refreshSelectedObject(snapshot.image);
+  }, [getActiveCanvas, saveHistory, refreshSelectedObject]);
+
+  const cancelCrop = useCallback(() => {
+    const canvas = getActiveCanvas();
+    const snapshot = cropSnapshotRef.current;
+    if (!canvas || !snapshot) {
+      setCropState(EMPTY_CROP_STATE);
+      return;
+    }
+    snapshot.image.set(snapshot.properties as any);
+    snapshot.image.setPositionByOrigin(snapshot.center, "center", "center");
+    snapshot.image.setCoords();
+    canvas.setActiveObject(snapshot.image);
+    canvas.requestRenderAll();
+    cropSnapshotRef.current = null;
+    setCropState(EMPTY_CROP_STATE);
+    refreshSelectedObject(snapshot.image);
+  }, [getActiveCanvas, refreshSelectedObject]);
+
   const setSelectedTemplateLock = useCallback((locked: boolean) => {
     const canvas = getActiveCanvas();
-    if (!canvas || !selectedObject) return;
-    setObjectTemplateLock(selectedObject, locked);
+    const target = canvas?.getActiveObject() ?? selectedObject;
+    if (!canvas || !target) return;
+    setObjectTemplateLock(target, locked);
     const rules = rulesFromCanvas(canvas, "regions");
     templateRulesRef.current = rules;
     setTemplateEditRulesState(rules);
@@ -286,6 +552,8 @@ export function useCanvasState() {
     const canvas = getActiveCanvas();
     const history = pageId ? historyMapRef.current.get(pageId) : undefined;
     if (!canvas || !pageId || !history || index < 0 || index >= history.entries.length) return;
+    cropSnapshotRef.current = null;
+    setCropState(EMPTY_CROP_STATE);
     isRestoringRef.current.add(pageId);
     history.index = index;
     void canvas.loadFromJSON(JSON.parse(history.entries[index])).then(() => {
@@ -418,14 +686,19 @@ export function useCanvasState() {
       } else if (meta && event.key === "z" && event.shiftKey) {
         event.preventDefault();
         redo();
+      } else if (meta && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        void duplicateSelected();
       } else if ((event.key === "Delete" || event.key === "Backspace") && !isTextEditing()) {
         event.preventDefault();
         deleteSelected();
+      } else if (event.key === "Escape" && cropSnapshotRef.current) {
+        cancelCrop();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo, deleteSelected]);
+  }, [undo, redo, duplicateSelected, deleteSelected, cancelCrop]);
 
   function isTextEditing(): boolean {
     const object = getActiveCanvas()?.getActiveObject();
@@ -452,6 +725,16 @@ export function useCanvasState() {
     setBackground,
     updateSelectedObject,
     deleteSelected,
+    duplicateSelected,
+    arrangeSelected,
+    flipSelected,
+    toggleSelectedLock,
+    recolorSelectedVector,
+    beginCrop,
+    updateCrop,
+    applyCrop,
+    cancelCrop,
+    cropState,
     undo,
     redo,
     canUndo,
