@@ -3,8 +3,11 @@ import { Toolbar } from "./toolbar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { PagesBar } from "./pages-bar";
+import { useEditor } from "../context";
 
 export function Editor() {
+  const { readOnly } = useEditor();
+
   return (
     <div class="flex flex-col h-full w-full">
       <Toolbar />
@@ -14,7 +17,7 @@ export function Editor() {
           <CanvasArea />
           <PagesBar />
         </div>
-        <RightSidebar />
+        {!readOnly && <RightSidebar />}
       </div>
     </div>
   );
