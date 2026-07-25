@@ -6,6 +6,14 @@ export const EXTRA_OBJECT_PROPERTIES = [
   "templateLocked",
   "templateEditable",
   "_isBgImage",
+  "ddoneSourceId",
+  "ddoneProvider",
+  "ddoneSourceUrl",
+  "ddoneLicense",
+  "ddoneLicenseUrl",
+  "ddoneAuthor",
+  "ddoneAttribution",
+  "ddoneAttributionRequired",
 ] as const;
 
 export type DDoneFabricObject = fabric.FabricObject & {
@@ -13,6 +21,14 @@ export type DDoneFabricObject = fabric.FabricObject & {
   templateLocked?: boolean;
   templateEditable?: boolean;
   _isBgImage?: boolean;
+  ddoneSourceId?: string;
+  ddoneProvider?: string;
+  ddoneSourceUrl?: string;
+  ddoneLicense?: string;
+  ddoneLicenseUrl?: string;
+  ddoneAuthor?: string;
+  ddoneAttribution?: string;
+  ddoneAttributionRequired?: boolean;
 };
 
 export function ensureObjectId(object: fabric.FabricObject): string {
