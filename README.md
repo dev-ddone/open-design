@@ -1,145 +1,156 @@
-<img src="readme-banner.png" alt="Open Design preview" width="100%" />
+<img src="readme-banner.png" alt="DDone Design preview" width="100%" />
 
-# OpenClaw Design App: The Open-Source Canva Alternative for SaaS
+# DDone Design
 
-A design editor for creating professional social media graphics — LinkedIn posts, quote cards, announcements, and more. Part of the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem. Zero cloud dependencies — runs locally with SQLite.
+A self-hosted, open-source Canva-like design workspace based on Open Design. It combines a Fabric.js visual editor with multi-page designs, organizations, client separation, role-based permissions, private asset storage and realtime Yjs collaboration.
 
-Built with **Preact + Fabric.js + Tailwind CSS + Hono + SQLite**. Ships with a Figma-inspired dark editor UI, retina canvas rendering, and pre-built LinkedIn post templates.
+## Included
 
-## What Is It?
+- **Organizations and users** with cookie-based authentication.
+- **Roles:** `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`.
+- **Client separation** inside each organization.
+- **Realtime collaboration** over authenticated WebSockets with persistent Yjs state.
+- **Multi-page Fabric.js editor** with PNG export and reusable templates.
+- **Searchable Elements library:** shapes, icons, ornaments, frames, food, cocktails, backgrounds and social logos.
+- **Iconify provider** limited to configured open-source collections.
+- **PostgreSQL** for users, permissions, designs, clients, assets and realtime documents.
+- **S3/MinIO or local storage** for private uploads.
+- **Docker Compose and Coolify deployment** with health checks and automatic migrations.
 
-OpenClaw Design App is a production-ready graphic design editor designed for the OpenClaw community. Think of it as an open-source Canva alternative — a visual design tool you can self-host, customize, and embed in any SaaS product.
+## Quick start
 
-Unlike Canva or Adobe Express, this runs entirely on your own infrastructure. No subscriptions, no watermarks, no vendor lock-in. Create pixel-perfect social media graphics with professional typography and export at 2x resolution.
+Requirements:
 
-## Features
-
-- **Fabric.js canvas** — full object manipulation with retina/HiDPI rendering (2x device pixel ratio)
-- **Pre-built templates** — LinkedIn-optimized: Quote Card, Stats Highlight, Announcement, Tips List, Profile Card, Minimal Text
-- **10 Google Fonts** — Inter, Playfair Display, Montserrat, Poppins, Roboto, Open Sans, Lora, Raleway, Source Sans Pro, Merriweather
-- **Text editing** — font family, size, weight, alignment, color, line height, letter spacing
-- **Shapes** — rectangles, circles, triangles, lines with fill, stroke, border radius
-- **Image uploads** — drag-and-drop or click to upload, place on canvas
-- **Backgrounds** — solid colors, gradients, uploaded images
-- **Canvas sizes** — LinkedIn Square (1080x1080), LinkedIn Landscape (1200x627), LinkedIn Portrait (1200x1500), Instagram Story (1080x1920)
-- **Undo/Redo** — full history with keyboard shortcuts (Cmd+Z / Cmd+Shift+Z)
-- **2x PNG export** — crisp high-resolution output for social media
-- **Auto-save** — designs persist to SQLite with debounced saves
-- **Dual-mode UI** — human-optimized + AI-agent-optimized (`?agent=true`)
-
-## Quickstart
+- Docker with Compose
+- Git
 
 ```bash
-git clone https://github.com/clawnify/open-design.git
+git clone https://github.com/dev-ddone/open-design.git
 cd open-design
-pnpm install
-pnpm run dev
+cp .env.example .env
 ```
 
-Open `http://localhost:5178` in your browser. Data persists in `data.db`, uploads in `uploads/`.
+Set at least these values in `.env`:
 
-### Agent Mode (for OpenClaw / Claude Code)
-
-Append `?agent=true` to the URL:
-
+```env
+APP_URL=http://localhost:3006
+JWT_SECRET=replace-with-at-least-32-random-characters
+S3_SECRET_KEY=replace-with-a-secure-minio-password
+BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-secure-password
 ```
-http://localhost:5178/?agent=true
-```
 
-This activates an agent-friendly UI with:
-- Explicit buttons always visible (no hover-to-reveal)
-- Large click targets for reliable browser automation
-- All controls accessible without drag interactions
-- Semantic labels for AI navigation
-
-### Using with Claude Code
-
-Claude Code can interact with the design editor through the REST API:
+Start the stack:
 
 ```bash
-# Create a new design
-curl -X POST http://localhost:3006/api/designs \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Q1 Results", "width": 1080, "height": 1080}'
-
-# Load a template
-curl http://localhost:3006/api/templates/1
-
-# Update design with canvas JSON
-curl -X PUT http://localhost:3006/api/designs/1 \
-  -H "Content-Type: application/json" \
-  -d '{"canvas_json": "{...}"}'
+docker compose up --build -d
 ```
 
-OpenClaw agents can also use the browser tool to visually interact with the editor — navigate, click templates, edit text, and export PNGs.
+Open:
 
-## Tech Stack
+```text
+http://localhost:3006
+```
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Preact, TypeScript, Tailwind CSS v4, Vite |
-| **Canvas** | Fabric.js v6 (retina rendering, object manipulation) |
-| **Backend** | Hono, Node.js |
-| **Database** | SQLite (better-sqlite3) |
-| **Fonts** | Google Fonts (WebFontLoader) |
-| **Icons** | Lucide |
+Health check:
 
-### Prerequisites
+```text
+http://localhost:3006/health
+```
 
-- Node.js 20+
-- pnpm (or npm/yarn)
+## Local development
+
+Run PostgreSQL and MinIO:
+
+```bash
+docker compose up -d postgres minio
+```
+
+Install dependencies and start Vite plus the Node API:
+
+```bash
+corepack enable
+pnpm install --no-frozen-lockfile
+cp .env.example .env
+pnpm dev
+```
+
+Frontend development URL:
+
+```text
+http://localhost:5178
+```
+
+API and production URL:
+
+```text
+http://localhost:3006
+```
+
+## Permission model
+
+| Capability | Owner | Admin | Editor | Viewer |
+|---|---:|---:|---:|---:|
+| Manage workspace members | Yes | Yes | No | No |
+| Create clients | Yes | Yes | Yes | No |
+| Create and edit designs | Yes | Yes | Yes | No |
+| Upload and reuse assets | Yes | Yes | Yes | No |
+| View and export designs | Yes | Yes | Yes | Yes |
+
+Every design, client, uploaded asset and private template is scoped to an organization. API authorization is applied server-side; hiding controls in the interface is not the security boundary.
+
+## Elements library
+
+The editor sidebar contains:
+
+```text
+Elements
+├── Search
+├── Shapes
+├── Icons
+├── Ornaments
+├── Frames
+├── Food
+├── Cocktails
+├── Backgrounds
+└── Social logos
+```
+
+Built-in SVG elements can be recolored before insertion. Icon searches are proxied through the application and restricted through `ICONIFY_COLLECTIONS`.
+
+## Production deployment
+
+See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
+
+- Coolify configuration;
+- required secrets;
+- persistent volumes;
+- WebSocket routing;
+- backup and recovery;
+- safe update steps.
 
 ## Architecture
 
+```text
+src/client
+  Preact UI
+  Fabric.js multi-page editor
+  session/workspace controls
+  searchable elements library
+  Yjs collaboration client
+
+src/server
+  Hono API on Node.js
+  JWT cookie authentication
+  organization and role authorization
+  PostgreSQL persistence
+  MinIO/S3 storage
+  authenticated Yjs WebSocket server
+
+migrations
+  versioned PostgreSQL schema
 ```
-src/
-  server/
-    schema.sql  — SQLite schema (designs, templates) + template seeds
-    db.ts       — SQLite wrapper (query, get, run, transaction)
-    index.ts    — Hono REST API (designs CRUD, templates, uploads)
-    uploads.ts  — Local file upload management
-    dev.ts      — Dev server with static file serving
-  client/
-    app.tsx           — Root component with WebFont loading
-    context.tsx       — Editor context + canvas size presets
-    hooks/
-      use-canvas.ts   — Fabric.js state, undo/redo, zoom, export
-      use-designs.ts  — Designs CRUD + auto-save + template loading
-    components/
-      editor.tsx        — Main layout (toolbar + sidebars + canvas)
-      canvas.tsx        — Fabric.js canvas with retina rendering
-      toolbar.tsx       — Size picker, undo/redo, zoom, export, save
-      left-sidebar.tsx  — Templates, text, shapes, images, backgrounds
-      right-sidebar.tsx — Properties panel (context-aware per selection)
-      template-card.tsx — Template thumbnail in gallery
-      design-list.tsx   — Saved designs list with rename/delete
-```
-
-### Data Model
-
-```sql
-designs   (id, name, canvas_json, width, height, thumbnail_url, created_at, updated_at)
-templates (id, name, category, canvas_json, width, height, thumbnail_url, sort_order)
-```
-
-### API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/designs` | List all designs |
-| POST | `/api/designs` | Create a design |
-| GET | `/api/designs/:id` | Get a design |
-| PUT | `/api/designs/:id` | Update a design |
-| DELETE | `/api/designs/:id` | Delete a design |
-| GET | `/api/templates` | List all templates |
-| GET | `/api/templates/:id` | Get a template |
-| POST | `/api/uploads` | Upload an image file |
-| GET | `/api/uploads/:filename` | Serve an uploaded image |
-
-## Community & Contributions
-
-This project is part of the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem. Contributions are welcome — open an issue or submit a PR.
 
 ## License
 
-MIT
+MIT. The project remains based on the upstream Open Design work. Third-party icon collections and trademarks retain their respective licenses and usage rules.
