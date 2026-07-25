@@ -83,6 +83,7 @@ export interface EditorContextValue {
 
   templates: Template[];
   loading: boolean;
+  refreshLibrary: () => Promise<void>;
   versions: DesignVersion[];
   versionsLoading: boolean;
   loadVersions: (designId?: string | null) => Promise<void>;
