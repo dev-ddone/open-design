@@ -10,7 +10,7 @@ import {
 import { config } from "./config.js";
 
 export interface StoredObject {
-  data: Uint8Array;
+  data: ArrayBuffer;
   contentType: string;
 }
 
@@ -52,6 +52,10 @@ function safeLocalPath(key: string): string {
   return resolve(localRoot, normalized);
 }
 
+function toArrayBuffer(data: Uint8Array): ArrayBuffer {
+  return Uint8Array.from(data).buffer;
+}
+
 export async function putObject(
   key: string,
   data: Uint8Array,
@@ -78,7 +82,7 @@ export async function getObject(key: string, fallbackContentType: string): Promi
   if (config.storage.driver === "local") {
     try {
       const data = await readFile(safeLocalPath(key));
-      return { data, contentType: fallbackContentType };
+      return { data: toArrayBuffer(data), contentType: fallbackContentType };
     } catch {
       return null;
     }
@@ -89,7 +93,7 @@ export async function getObject(key: string, fallbackContentType: string): Promi
     );
     if (!response.Body) return null;
     return {
-      data: await response.Body.transformToByteArray(),
+      data: toArrayBuffer(await response.Body.transformToByteArray()),
       contentType: response.ContentType ?? fallbackContentType,
     };
   } catch {
