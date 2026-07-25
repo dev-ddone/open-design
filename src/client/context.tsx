@@ -1,6 +1,6 @@
 import { createContext } from "preact";
 import { useContext } from "preact/hooks";
-import type { Design, Template, Page } from "./types";
+import type { Design, DesignVersion, Template, TemplateEditRules, Page } from "./types";
 import type * as fabric from "fabric";
 import type { Collaborator } from "./hooks/use-collaboration";
 
@@ -51,9 +51,14 @@ export interface EditorContextValue {
   zoomIn: () => void;
   zoomOut: () => void;
   exportPNG: () => void;
+  exportDesign: (format: "png" | "jpg" | "svg" | "pdf", filename?: string, allPages?: boolean) => Promise<void>;
   getCanvasJSON: () => string;
   getCanvasJSONForPage: (pageId: string) => string;
   loadTemplate: (template: Template) => void;
+  templateEditRules: TemplateEditRules;
+  setTemplateEditRules: (rules: TemplateEditRules | null | undefined, readOnly?: boolean) => void;
+  setSelectedTemplateLock: (locked: boolean) => void;
+  buildTemplateRules: (mode: TemplateEditRules["mode"]) => TemplateEditRules;
 
   navigate: (to: string) => void;
 
@@ -78,6 +83,11 @@ export interface EditorContextValue {
 
   templates: Template[];
   loading: boolean;
+  versions: DesignVersion[];
+  versionsLoading: boolean;
+  loadVersions: (designId?: string | null) => Promise<void>;
+  createVersion: (label?: string, source?: "manual" | "save") => Promise<void>;
+  restoreVersion: (versionId: string) => Promise<void>;
 
   readOnly: boolean;
   collaborationConnected: boolean;
