@@ -122,6 +122,24 @@ jobs:
             'http://127.0.0.1:3006/api/elements/search?category=ornaments&q=floral' > elements.json
           jq -e 'length > 0' elements.json
 
+          cat > safe.svg <<'SVG'
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <defs><linearGradient id="g"><stop stop-color="#6d5dfc"/><stop offset="1" stop-color="#171717"/></linearGradient></defs>
+            <circle cx="50" cy="50" r="40" fill="url(#g)"/>
+          </svg>
+          SVG
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --form 'file=@safe.svg;type=image/svg+xml' \
+            http://127.0.0.1:3006/api/uploads > upload.json
+          ASSET_URL=$(jq -er '.url' upload.json)
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            "http://127.0.0.1:3006${ASSET_URL}" > downloaded.svg
+          grep -q '<svg' downloaded.svg
+
           curl --fail --silent --show-error http://127.0.0.1:3006/ > home.html
           grep -q '<div id="app"></div>' home.html
 
@@ -140,6 +158,7 @@ jobs:
         with:
           name: ci-diagnostics
           path: |
+            pnpm-lock.yaml
             typecheck.log
             frontend-build.log
             runtime.log
@@ -149,6 +168,7 @@ jobs:
             client.json
             design.json
             elements.json
+            upload.json
             docker-build.log
           if-no-files-found: ignore
           retention-days: 3
