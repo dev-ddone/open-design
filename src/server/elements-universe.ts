@@ -649,7 +649,7 @@ async function searchSketchfab(input: { q: string; pageSize: number }): Promise<
   url.searchParams.set("q", input.q);
   url.searchParams.set("count", String(Math.min(input.pageSize, 24)));
   url.searchParams.set("downloadable", "true");
-  const headers = config.elements.sketchfabToken ? { Authorization: `Token ${config.elements.sketchfabToken}` } : {};
+  const headers: Record<string, string> = config.elements.sketchfabToken ? { Authorization: `Token ${config.elements.sketchfabToken}` } : {};
   const data = await cached(`sketchfab:${url}`, () => fetchJson<any>(url, headers), 900);
   return (data.results ?? []).map((item: any) => {
     const preview = [...(item.thumbnails?.images ?? [])].sort((a: any, b: any) => Number(b.width) - Number(a.width))[0]?.url;
@@ -1045,7 +1045,7 @@ universe.get("/api/elements-universe/jamendo/:id/content", requireAuth, requireO
 universe.get("/api/elements-universe/sketchfab/:uid/preview", requireAuth, requireOrganization, async (c) => {
   const uid = c.req.param("uid");
   if (!/^[a-z0-9-]+$/i.test(uid)) throw new HTTPException(400, { message: "Invalid Sketchfab identifier" });
-  const headers = config.elements.sketchfabToken ? { Authorization: `Token ${config.elements.sketchfabToken}` } : {};
+  const headers: Record<string, string> = config.elements.sketchfabToken ? { Authorization: `Token ${config.elements.sketchfabToken}` } : {};
   const detail = await fetchJson<any>(new URL(`models/${uid}`, `${config.elements.sketchfabApiUrl.replace(/\/$/, "")}/`), headers);
   const source = [...(detail.thumbnails?.images ?? [])].sort((a: any, b: any) => Number(b.width) - Number(a.width))[0]?.url;
   if (!source) throw new HTTPException(404, { message: "Sketchfab preview unavailable" });
