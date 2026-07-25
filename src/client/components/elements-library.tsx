@@ -20,7 +20,7 @@ import {
   Waves,
 } from "lucide-preact";
 import * as fabric from "fabric";
-import { scopedHeaders } from "../api";
+import { getActiveClientId, scopedHeaders } from "../api";
 import { ensureObjectId, type DDoneFabricObject } from "../canvas-model";
 import { useEditor } from "../context";
 import type {
@@ -47,15 +47,15 @@ const CATEGORIES: Array<{ key: ElementCategory; label: string; icon: typeof Grid
 
 const QUICK_SEARCHES = [
   "menu elegante",
-  "floral divider",
+  "ornamento floreale",
   "pizza",
   "cocktail",
-  "coffee",
-  "gold frame",
-  "paper texture",
-  "restaurant illustration",
+  "caffè",
+  "cornice dorata",
+  "sfondo carta",
+  "illustrazione ristorante",
   "social media",
-  "summer party",
+  "festa estiva",
 ];
 
 const FAVORITES_KEY = "ddone_design_element_favorites";
@@ -112,6 +112,69 @@ function attachSourceMetadata(object: fabric.FabricObject, element: DesignElemen
   target.ddoneAttributionRequired = element.attributionRequired;
 }
 
+function safeFilename(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "open-asset";
+}
+
+function extensionForMime(mime: string): string {
+  const extensions: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+  };
+  return extensions[mime.split(";", 1)[0].toLowerCase()] ?? "png";
+}
+
+async function persistRemoteImage(element: DesignElement): Promise<string> {
+  if (!element.assetUrl) throw new Error("Immagine remota non disponibile");
+  if (element.provider === "uploads" && element.assetUrl.startsWith("/api/assets/")) {
+    return element.assetUrl;
+  }
+
+  const remoteResponse = await fetchProtected(element.assetUrl);
+  const blob = await remoteResponse.blob();
+  if (!blob.type.startsWith("image/")) throw new Error("La sorgente non ha restituito un’immagine");
+  if (blob.size > 25 * 1024 * 1024) throw new Error("L’immagine supera il limite di 25 MB");
+
+  const extension = extensionForMime(blob.type);
+  const file = new File(
+    [blob],
+    `${safeFilename(element.name)}-${safeFilename(element.provider)}.${extension}`,
+    { type: blob.type.split(";", 1)[0] },
+  );
+  const form = new FormData();
+  form.append("file", file);
+  const clientId = getActiveClientId();
+  if (clientId) form.append("client_id", clientId);
+  form.append("display_name", element.name);
+  form.append("category", element.category);
+  form.append("tags", JSON.stringify(element.tags ?? []));
+  form.append("license", element.license ?? "");
+  form.append("author", element.author ?? "");
+  form.append("source_url", element.sourceUrl ?? "");
+  form.append("attribution_required", String(element.attributionRequired));
+
+  const response = await fetch("/api/uploads", {
+    method: "POST",
+    credentials: "include",
+    headers: scopedHeaders(),
+    body: form,
+  });
+  const data = await response.json() as { url?: string; error?: string };
+  if (!response.ok || !data.url) {
+    throw new Error(data.error ?? "Impossibile importare l’immagine nella libreria privata");
+  }
+  return data.url;
+}
+
 function AssetPreview({ element, color }: { element: DesignElement; color: string }) {
   const [url, setUrl] = useState<string | null>(element.svg ? svgPreview(element.svg, color) : null);
 
@@ -165,6 +228,7 @@ export function ElementsLibrary() {
   const [favorites, setFavorites] = useState<string[]>(() => readIds(FAVORITES_KEY));
   const [recents, setRecents] = useState<string[]>(() => readIds(RECENTS_KEY));
   const [showFavorites, setShowFavorites] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
 
   const query = useMemo(() => search.trim(), [search]);
   const visibleElements = useMemo(() => {
@@ -263,15 +327,14 @@ export function ElementsLibrary() {
 
   const insertImage = useCallback(async (element: DesignElement, asBackground = false) => {
     if (!canvas || !element.assetUrl) return;
-    const blob = await (await fetchProtected(element.assetUrl)).blob();
-    const objectUrl = URL.createObjectURL(blob);
+    setImportingId(element.id);
     try {
+      const stableUrl = await persistRemoteImage(element);
       if (asBackground) {
-        setBackground("image", objectUrl);
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5_000);
+        setBackground("image", stableUrl);
         return;
       }
-      const image = await fabric.FabricImage.fromURL(objectUrl, { crossOrigin: "anonymous" });
+      const image = await fabric.FabricImage.fromURL(stableUrl, { crossOrigin: "anonymous" });
       const scale = Math.min(
         (canvasWidth * 0.65) / (image.width || 1),
         (canvasHeight * 0.65) / (image.height || 1),
@@ -288,7 +351,7 @@ export function ElementsLibrary() {
       canvas.setActiveObject(image);
       canvas.requestRenderAll();
     } finally {
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5_000);
+      setImportingId(null);
     }
   }, [canvas, canvasWidth, canvasHeight, setBackground]);
 
@@ -311,7 +374,7 @@ export function ElementsLibrary() {
           <strong class="text-[11px] text-zinc-800">Ricerca open federata</strong>
         </div>
         <p class="m-0 text-[10px] leading-relaxed text-zinc-500">
-          Icone, emoji, illustrazioni e foto aperte da più archivi. Licenza e autore restano collegati all’oggetto.
+          Icone, emoji, illustrazioni e foto aperte da più archivi. Le foto scelte vengono importate nella libreria privata; licenza e autore restano collegati all’oggetto.
         </p>
       </div>
 
@@ -436,17 +499,19 @@ export function ElementsLibrary() {
           {visibleElements.map((element) => {
             const favorite = favorites.includes(element.id);
             const recent = recents.includes(element.id);
+            const importing = importingId === element.id;
             return (
               <div
                 key={element.id}
                 class={`group relative overflow-hidden rounded-lg border bg-zinc-50 hover:border-accent hover:bg-accent/5 ${recent ? "border-violet-200" : "border-zinc-200"}`}
               >
                 <button
+                  disabled={importing}
                   title={`${element.name} · ${element.providerLabel} · ${element.license}`}
                   onClick={() => void insertElement(element)}
-                  class="w-full aspect-square p-2 bg-transparent border-0 cursor-pointer"
+                  class="w-full aspect-square p-2 bg-transparent border-0 cursor-pointer disabled:opacity-50"
                 >
-                  <AssetPreview element={element} color={color} />
+                  {importing ? <LoaderCircle size={18} class="animate-spin mx-auto text-violet-600" /> : <AssetPreview element={element} color={color} />}
                 </button>
                 <button
                   title={favorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
@@ -462,9 +527,10 @@ export function ElementsLibrary() {
                     <span class="truncate text-[7px] text-zinc-400">{element.license}</span>
                     {element.kind === "image" && element.assetUrl && (
                       <button
-                        title="Usa come sfondo"
+                        disabled={importing}
+                        title="Importa e usa come sfondo"
                         onClick={() => void insertImage(element, true)}
-                        class="rounded px-1 py-0.5 border border-zinc-200 bg-white text-[7px] text-zinc-500 cursor-pointer hover:border-accent"
+                        class="rounded px-1 py-0.5 border border-zinc-200 bg-white text-[7px] text-zinc-500 cursor-pointer hover:border-accent disabled:opacity-50"
                       >
                         Sfondo
                       </button>
@@ -494,7 +560,7 @@ export function ElementsLibrary() {
       )}
 
       <p class="m-0 text-[9px] leading-relaxed text-zinc-400">
-        Le risorse restano soggette alla licenza indicata. Per gli elementi con attribuzione obbligatoria, autore, fonte e licenza vengono salvati nei metadati del progetto.
+        Le risorse restano soggette alla licenza indicata. Le immagini remote selezionate vengono copiate nello storage privato; autore, fonte e licenza vengono salvati sia nell’asset sia nell’oggetto del progetto.
       </p>
     </div>
   );
