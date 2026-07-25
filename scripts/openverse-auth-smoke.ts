@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { once } from "node:events";
 import { OpenverseAuthManager } from "../src/server/openverse-auth.js";
 
-function assert(condition: unknown, message: string): asserts condition {
+function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message);
 }
 
@@ -62,6 +62,7 @@ server.listen(0, "127.0.0.1");
 await once(server, "listening");
 const address = server.address();
 assert(address && typeof address !== "string", "Fake Openverse server did not start");
+if (!address || typeof address === "string") throw new Error("Fake Openverse server address is invalid");
 const apiUrl = `http://127.0.0.1:${address.port}`;
 
 try {
