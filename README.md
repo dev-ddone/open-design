@@ -48,13 +48,17 @@ ELEMENTS_CACHE_TTL_SECONDS=900
 ELEMENTS_REQUEST_TIMEOUT_MS=8000
 ELEMENTS_MAX_PER_PROVIDER=48
 OPENVERSE_API_URL=https://api.openverse.org
+OPENVERSE_CLIENT_ID=
+OPENVERSE_CLIENT_SECRET=
 OPENVERSE_API_TOKEN=
 OPENVERSE_LICENSES=cc0,pdm,by,by-sa
 WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
 ELEMENT_PACK_URLS=
 ```
 
-`OPENVERSE_API_TOKEN` is optional but recommended for higher rate limits. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
+For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` together. The backend requests a short-lived OAuth2 token, stores it only in process memory, refreshes it before expiration and retries once with a fresh token after a `401`. Concurrent searches share the same in-flight token request. If authentication is temporarily unavailable, the provider falls back to `OPENVERSE_API_TOKEN` when configured, otherwise to anonymous access.
+
+`OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
 
 ## Creative tools
 
@@ -159,6 +163,7 @@ src/server
   JWT cookie authentication
   organization/client authorization
   federated provider adapters and secure media proxies
+  automatic Openverse OAuth2 token lifecycle
   PostgreSQL persistence
   MinIO/S3 storage
   authenticated Yjs WebSocket server
