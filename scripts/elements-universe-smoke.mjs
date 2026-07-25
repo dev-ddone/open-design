@@ -73,6 +73,50 @@ const uploads = await getJson(
 assert(Array.isArray(uploads.items), "Private asset search response is invalid");
 assert(uploads.items.some((item) => item.provider === "uploads" && item.assetUrl?.startsWith("/api/assets/")), "Previously uploaded SVG is not visible in the private provider");
 
+const importedSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#6d5dfc"/></svg>';
+const importForm = new FormData();
+importForm.append("file", new Blob([importedSvg], { type: "image/svg+xml" }), "persistent-remote.svg");
+importForm.append("client_id", client.id);
+importForm.append("display_name", "Persistent Remote Asset");
+importForm.append("category", "illustrations");
+importForm.append("tags", JSON.stringify(["persistent", "remote", "license-test"]));
+importForm.append("license", "CC BY 4.0");
+importForm.append("author", "DDone CI Author");
+importForm.append("source_url", "https://example.com/open-asset-source");
+importForm.append("attribution_required", "true");
+
+const importedResponse = await fetch(`${BASE_URL}/api/uploads`, {
+  method: "POST",
+  headers,
+  body: importForm,
+});
+const importedRaw = await importedResponse.text();
+const imported = importedRaw ? JSON.parse(importedRaw) : null;
+assert(importedResponse.status === 201, `Persistent asset import returned ${importedResponse.status}: ${importedRaw}`);
+assert(imported?.url?.startsWith("/api/assets/"), "Persistent import did not return a stable asset URL");
+assert(imported.license === "CC BY 4.0", "Imported asset license was not persisted");
+assert(imported.author === "DDone CI Author", "Imported asset author was not persisted");
+assert(imported.source_url === "https://example.com/open-asset-source", "Imported asset source URL was not persisted");
+assert(imported.attribution_required === true, "Imported asset attribution flag was not persisted");
+
+const cookieOnlyContent = await fetch(`${BASE_URL}${imported.url}`, {
+  headers: { Cookie: cookie },
+});
+assert(cookieOnlyContent.ok, `Stable asset URL is not browser-loadable with the session cookie (${cookieOnlyContent.status})`);
+assert((cookieOnlyContent.headers.get("content-type") ?? "").includes("image/svg+xml"), "Stable asset content type is incorrect");
+assert((await cookieOnlyContent.text()).includes("<svg"), "Stable asset content is missing");
+
+const importedSearch = await getJson(
+  "/api/elements-universe/search?providers=uploads&category=all&q=Persistent&page=1&page_size=12",
+  headers,
+);
+const importedResult = importedSearch.items.find((item) => item.id === `uploads:${imported.asset_id}`);
+assert(importedResult, "Persistent imported asset was not indexed by the private provider");
+assert(importedResult.license === "CC BY 4.0", "Private provider lost imported license metadata");
+assert(importedResult.author === "DDone CI Author", "Private provider lost imported author metadata");
+assert(importedResult.sourceUrl === "https://example.com/open-asset-source", "Private provider lost imported source metadata");
+assert(importedResult.attributionRequired === true, "Private provider lost imported attribution metadata");
+
 const empty = await getJson(
   "/api/elements-universe/search?providers=builtin&category=ornaments&q=definitely-no-such-ddone-element&page=1&page_size=12",
   headers,
@@ -80,4 +124,4 @@ const empty = await getJson(
 assert(Array.isArray(empty.items) && empty.items.length === 0, "Empty searches must return an empty result list");
 assert(empty.nextPage === null, "Empty searches must not advertise another page");
 
-console.log("Federated Elements providers, Italian query expansion, licenses and private assets verified.");
+console.log("Federated Elements providers, Italian search, licenses and persistent private imports verified.");
