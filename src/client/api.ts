@@ -21,11 +21,17 @@ export function setActiveClientId(id: string | null): void {
   window.dispatchEvent(new CustomEvent("ddone:client-changed", { detail: id }));
 }
 
-export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
+export function scopedHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers = { ...extra };
   const organizationId = getActiveOrganizationId();
+  const clientId = getActiveClientId();
   if (organizationId) headers["X-Organization-ID"] = organizationId;
+  if (clientId) headers["X-Client-ID"] = clientId;
+  return headers;
+}
 
+export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers = scopedHeaders();
   const opts: RequestInit = {
     method,
     headers,
