@@ -14,6 +14,13 @@ export const EXTRA_OBJECT_PROPERTIES = [
   "ddoneAuthor",
   "ddoneAttribution",
   "ddoneAttributionRequired",
+  "ddoneIsSvg",
+  "ddoneMediaKind",
+  "ddoneFormat",
+  "ddoneTransparent",
+  "ddoneEffect",
+  "ddoneMediaUrl",
+  "ddonePosterUrl",
 ] as const;
 
 export type DDoneFabricObject = fabric.FabricObject & {
@@ -29,6 +36,13 @@ export type DDoneFabricObject = fabric.FabricObject & {
   ddoneAuthor?: string;
   ddoneAttribution?: string;
   ddoneAttributionRequired?: boolean;
+  ddoneIsSvg?: boolean;
+  ddoneMediaKind?: string;
+  ddoneFormat?: string;
+  ddoneTransparent?: boolean;
+  ddoneEffect?: string;
+  ddoneMediaUrl?: string;
+  ddonePosterUrl?: string;
 };
 
 export function ensureObjectId(object: fabric.FabricObject): string {
@@ -120,4 +134,12 @@ export function setObjectTemplateLock(object: fabric.FabricObject, locked: boole
   ensureObjectId(object);
   target.templateLocked = locked;
   target.templateEditable = !locked;
+}
+
+export function markSvgObject(object: fabric.FabricObject, format = "svg"): void {
+  const target = object as DDoneFabricObject;
+  ensureObjectId(object);
+  target.ddoneIsSvg = true;
+  target.ddoneMediaKind = "vector";
+  target.ddoneFormat = format;
 }
