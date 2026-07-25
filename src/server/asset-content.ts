@@ -15,8 +15,7 @@ content.get("/api/assets/:id/content", requireAuth, async (c) => {
          ON om.organization_id = a.organization_id
         AND om.user_id = $2
        LEFT JOIN client_members cm
-         ON cm.organization_id = a.organization_id
-        AND cm.client_id = a.client_id
+         ON cm.client_id = a.client_id
         AND cm.user_id = $2
       WHERE a.id = $1
         AND (om.all_clients = TRUE OR a.client_id IS NULL OR cm.user_id IS NOT NULL)
