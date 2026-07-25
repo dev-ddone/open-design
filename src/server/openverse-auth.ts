@@ -202,7 +202,7 @@ export class OpenverseAuthManager {
   }
 }
 
-const INSTALLATION_KEY = Symbol.for("ddone.openverse.authenticatedFetch");
+const INSTALLATION_KEY = "__ddoneOpenverseAuthenticatedFetch" as const;
 type OpenverseGlobal = typeof globalThis & {
   [INSTALLATION_KEY]?: OpenverseAuthManager;
 };
