@@ -1,34 +1,32 @@
 import { useState, useRef, useCallback } from "preact/hooks";
 import {
   Type,
-  Square,
-  Circle,
-  Triangle,
-  Minus,
-  Image,
   Upload,
   Palette,
   LayoutGrid,
   Sparkles,
+  Shapes,
 } from "lucide-preact";
 import { useEditor } from "../context";
+import { useSession } from "../session";
 import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
+import { ElementsLibrary } from "./elements-library";
 
-type Section = "templates" | "text" | "shapes" | "images" | "background" | "designs";
+type Section = "templates" | "elements" | "text" | "images" | "background" | "designs";
 
-const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string }[] = [
-  { key: "templates", icon: Sparkles, label: "Templates" },
-  { key: "shapes", icon: Square, label: "Elements" },
-  { key: "text", icon: Type, label: "Text" },
-  { key: "images", icon: Upload, label: "Uploads" },
-  { key: "background", icon: Palette, label: "Bg" },
-  { key: "designs", icon: LayoutGrid, label: "Designs" },
+const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing: boolean }[] = [
+  { key: "templates", icon: Sparkles, label: "Templates", editing: true },
+  { key: "elements", icon: Shapes, label: "Elements", editing: true },
+  { key: "text", icon: Type, label: "Text", editing: true },
+  { key: "images", icon: Upload, label: "Uploads", editing: true },
+  { key: "background", icon: Palette, label: "Bg", editing: true },
+  { key: "designs", icon: LayoutGrid, label: "Designs", editing: false },
 ];
 
 const SECTION_TITLES: Record<Section, string> = {
   templates: "Templates",
-  shapes: "Elements",
+  elements: "Elements",
   text: "Text",
   images: "Uploads",
   background: "Background",
@@ -52,192 +50,170 @@ const BG_COLORS = [
 ];
 
 export function LeftSidebar() {
-  const { addText, addShape, addImage, setBackground, templates, loadTemplate } = useEditor();
-  const [activeSection, setActiveSection] = useState<Section | null>("templates");
+  const { addText, addImage, setBackground, templates, loadTemplate } = useEditor();
+  const { activeOrganization } = useSession();
+  const canEdit = activeOrganization?.role !== "VIEWER";
+  const [activeSection, setActiveSection] = useState<Section | null>(canEdit ? "templates" : "designs");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
 
-  const handleSectionClick = (key: Section) => {
-    setActiveSection((prev) => (prev === key ? null : key));
+  const handleSectionClick = (section: (typeof SECTIONS)[number]) => {
+    if (section.editing && !canEdit) return;
+    setActiveSection((previous) => (previous === section.key ? null : section.key));
   };
 
   const handleImageUpload = useCallback(
     async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
+      if (!canEdit || !files?.length) return;
       setUploading(true);
       try {
         for (const file of Array.from(files)) {
           const form = new FormData();
           form.append("file", file);
-          const resp = await fetch("/api/uploads", { method: "POST", body: form });
-          const data = await resp.json();
-          if (data.url) addImage(data.url);
+          const organizationId = localStorage.getItem("ddone_design_organization_id");
+          const response = await fetch("/api/uploads", {
+            method: "POST",
+            body: form,
+            credentials: "include",
+            headers: organizationId ? { "X-Organization-ID": organizationId } : {},
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? "Upload failed");
+          if (data.url) await addImage(data.url);
         }
-      } catch (e) {
-        console.error("Upload failed:", e);
+      } catch (error) {
+        console.error("Upload failed:", error);
       } finally {
         setUploading(false);
       }
     },
-    [addImage]
+    [addImage, canEdit],
   );
 
-  const handleBgUpload = useCallback(
+  const handleBackgroundUpload = useCallback(
     async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
+      if (!canEdit || !files?.length) return;
       const form = new FormData();
       form.append("file", files[0]);
       try {
-        const resp = await fetch("/api/uploads", { method: "POST", body: form });
-        const data = await resp.json();
+        const organizationId = localStorage.getItem("ddone_design_organization_id");
+        const response = await fetch("/api/uploads", {
+          method: "POST",
+          body: form,
+          credentials: "include",
+          headers: organizationId ? { "X-Organization-ID": organizationId } : {},
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Upload failed");
         if (data.url) setBackground("image", data.url);
-      } catch (e) {
-        console.error("Bg upload failed:", e);
+      } catch (error) {
+        console.error("Background upload failed:", error);
       }
     },
-    [setBackground]
+    [setBackground, canEdit],
   );
-
-  const handleDrop = useCallback(
-    (e: DragEvent) => {
-      e.preventDefault();
-      handleImageUpload(e.dataTransfer?.files ?? null);
-    },
-    [handleImageUpload]
-  );
-
-  const isOpen = activeSection !== null;
 
   return (
     <aside class="flex flex-row shrink-0">
-      {/* Icon Rail */}
       <div class="w-[70px] bg-white border-r border-zinc-200 flex flex-col items-center pt-2 gap-0.5 shrink-0">
-        {SECTIONS.map((s) => (
-          <button
-            key={s.key}
-            class={`flex flex-col items-center justify-center gap-0.5 w-[56px] h-[56px] rounded-lg bg-transparent border-none cursor-pointer transition-all ${
-              activeSection === s.key
-                ? "text-accent bg-accent/10"
-                : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50"
-            }`}
-            onClick={() => handleSectionClick(s.key)}
-          >
-            <s.icon size={20} />
-            <span class="text-[10px] leading-tight">{s.label}</span>
-          </button>
-        ))}
+        {SECTIONS.map((section) => {
+          const disabled = section.editing && !canEdit;
+          return (
+            <button
+              key={section.key}
+              disabled={disabled}
+              title={disabled ? "Viewer role cannot edit" : section.label}
+              class={`flex flex-col items-center justify-center gap-0.5 w-[56px] h-[56px] rounded-lg bg-transparent border-none transition-all ${
+                disabled
+                  ? "text-zinc-300 cursor-not-allowed"
+                  : activeSection === section.key
+                    ? "text-accent bg-accent/10 cursor-pointer"
+                    : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 cursor-pointer"
+              }`}
+              onClick={() => handleSectionClick(section)}
+            >
+              <section.icon size={20} />
+              <span class="text-[10px] leading-tight">{section.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Content Panel */}
       <div
         class="bg-white border-r border-zinc-200 overflow-hidden transition-all duration-200 ease-in-out"
-        style={{ width: isOpen ? "240px" : "0px" }}
+        style={{ width: activeSection ? "280px" : "0px" }}
       >
-        <div class="w-[240px] h-full flex flex-col">
+        <div class="w-[280px] h-full flex flex-col">
           {activeSection && (
             <>
-              <div class="px-3 pt-3 pb-2 shrink-0">
+              <div class="px-3 pt-3 pb-2 shrink-0 flex items-center justify-between">
                 <h2 class="text-xs font-semibold text-zinc-800 uppercase tracking-wide m-0">
                   {SECTION_TITLES[activeSection]}
                 </h2>
+                {!canEdit && <span class="text-[9px] rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-400">VIEW ONLY</span>}
               </div>
               <div class="flex-1 overflow-y-auto px-3 pb-3">
                 {activeSection === "templates" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-3">Click a template to apply</p>
+                    <p class="text-zinc-400 text-[11px] mb-3">Apply a reusable layout</p>
                     <div class="grid grid-cols-2 gap-2">
-                      {templates.map((t) => (
-                        <TemplateCard key={t.id} template={t} onClick={() => loadTemplate(t)} />
+                      {templates.map((template) => (
+                        <TemplateCard
+                          key={template.id}
+                          template={template}
+                          onClick={() => canEdit && loadTemplate(template)}
+                        />
                       ))}
                     </div>
                   </div>
                 )}
+
+                {activeSection === "elements" && canEdit && <ElementsLibrary />}
 
                 {activeSection === "text" && (
                   <div class="flex flex-col gap-2">
                     <p class="text-zinc-400 text-[11px] mb-1">Click to add text</p>
-                    <button
-                      class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group"
-                      onClick={() => addText("heading")}
-                    >
-                      <span class="text-lg font-bold text-zinc-900 group-hover:text-accent transition-colors">
-                        Add a heading
-                      </span>
-                      <span class="block text-[10px] text-zinc-400 mt-0.5">
-                        Montserrat Bold, 48px
-                      </span>
-                    </button>
-                    <button
-                      class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group"
-                      onClick={() => addText("subheading")}
-                    >
-                      <span class="text-sm font-medium text-zinc-900 group-hover:text-accent transition-colors">
-                        Add a subheading
-                      </span>
-                      <span class="block text-[10px] text-zinc-400 mt-0.5">
-                        Inter Medium, 32px
-                      </span>
-                    </button>
-                    <button
-                      class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group"
-                      onClick={() => addText("body")}
-                    >
-                      <span class="text-xs text-zinc-900 group-hover:text-accent transition-colors">
-                        Add body text
-                      </span>
-                      <span class="block text-[10px] text-zinc-400 mt-0.5">
-                        Inter Regular, 18px
-                      </span>
-                    </button>
-                  </div>
-                )}
-
-                {activeSection === "shapes" && (
-                  <div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Click to add a shape</p>
-                    <div class="grid grid-cols-2 gap-2">
-                      {[
-                        { type: "rect" as const, icon: Square, label: "Rectangle" },
-                        { type: "circle" as const, icon: Circle, label: "Circle" },
-                        { type: "triangle" as const, icon: Triangle, label: "Triangle" },
-                        { type: "line" as const, icon: Minus, label: "Line" },
-                      ].map((s) => (
-                        <button
-                          key={s.type}
-                          class="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5"
-                          onClick={() => addShape(s.type)}
-                        >
-                          <s.icon size={24} class="text-zinc-400" />
-                          <span class="text-[11px] text-zinc-400">{s.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {[
+                      { preset: "heading" as const, label: "Add a heading", detail: "Montserrat Bold, 48px", className: "text-lg font-bold" },
+                      { preset: "subheading" as const, label: "Add a subheading", detail: "Inter Medium, 32px", className: "text-sm font-medium" },
+                      { preset: "body" as const, label: "Add body text", detail: "Inter Regular, 18px", className: "text-xs" },
+                    ].map((item) => (
+                      <button
+                        key={item.preset}
+                        class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group"
+                        onClick={() => addText(item.preset)}
+                      >
+                        <span class={`${item.className} text-zinc-900 group-hover:text-accent transition-colors`}>{item.label}</span>
+                        <span class="block text-[10px] text-zinc-400 mt-0.5">{item.detail}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
 
                 {activeSection === "images" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Upload images to add to canvas</p>
+                    <p class="text-zinc-400 text-[11px] mb-2">Upload images to your private workspace</p>
                     <div
                       class="border-2 border-dashed border-zinc-300 rounded-lg p-6 text-center cursor-pointer transition-all hover:border-accent/50 hover:bg-accent/5"
                       onClick={() => fileInputRef.current?.click()}
-                      onDrop={handleDrop}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        void handleImageUpload(event.dataTransfer?.files ?? null);
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
                     >
                       <Upload size={24} class="text-zinc-400 mx-auto mb-2" />
-                      <p class="text-xs text-zinc-400">
-                        {uploading ? "Uploading..." : "Click or drag images here"}
-                      </p>
-                      <p class="text-[10px] text-zinc-600 mt-1">PNG, JPG, SVG, WebP</p>
+                      <p class="text-xs text-zinc-400">{uploading ? "Uploading…" : "Click or drag images here"}</p>
+                      <p class="text-[10px] text-zinc-500 mt-1">PNG, JPG, SVG, WebP · max 25 MB</p>
                     </div>
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
                       multiple
                       class="hidden"
-                      onChange={(e) => handleImageUpload((e.target as HTMLInputElement).files)}
+                      onChange={(event) => void handleImageUpload((event.target as HTMLInputElement).files)}
                     />
                   </div>
                 )}
@@ -246,54 +222,44 @@ export function LeftSidebar() {
                   <div>
                     <p class="text-zinc-400 text-[11px] mb-2">Solid colors</p>
                     <div class="grid grid-cols-4 gap-1.5 mb-4">
-                      {BG_COLORS.map((c) => (
+                      {BG_COLORS.map((color) => (
                         <button
-                          key={c}
+                          key={color}
                           class="w-full aspect-square rounded-md border border-zinc-300 cursor-pointer transition-all hover:scale-110 hover:border-accent"
-                          style={{ background: c }}
-                          onClick={() => setBackground("color", c)}
+                          style={{ background: color }}
+                          onClick={() => setBackground("color", color)}
                         />
                       ))}
                     </div>
-
                     <p class="text-zinc-400 text-[11px] mb-2">Custom color</p>
                     <input
                       type="color"
                       class="w-full h-8 rounded-md border border-zinc-300 cursor-pointer bg-transparent"
-                      onChange={(e) =>
-                        setBackground("color", (e.target as HTMLInputElement).value)
-                      }
+                      onChange={(event) => setBackground("color", (event.target as HTMLInputElement).value)}
                     />
-
                     <p class="text-zinc-400 text-[11px] mb-2 mt-4">Gradient presets</p>
                     <div class="grid grid-cols-3 gap-1.5 mb-4">
-                      {GRADIENT_PRESETS.map((g, i) => (
+                      {GRADIENT_PRESETS.map((gradient) => (
                         <button
-                          key={i}
+                          key={gradient}
                           class="w-full aspect-square rounded-md border border-zinc-300 cursor-pointer transition-all hover:scale-110 hover:border-accent"
-                          style={{ background: g }}
-                          onClick={() => {
-                            const match = g.match(/#[0-9a-f]{6}/gi);
-                            if (match) setBackground("color", match[0]);
-                          }}
+                          style={{ background: gradient }}
+                          onClick={() => setBackground("gradient", gradient)}
                         />
                       ))}
                     </div>
-
-                    <p class="text-zinc-400 text-[11px] mb-2">Background image</p>
                     <button
                       class="w-full p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer text-xs text-zinc-400 hover:border-accent hover:text-zinc-800 transition-all"
                       onClick={() => bgFileRef.current?.click()}
                     >
-                      <Upload size={14} class="inline mr-1.5" />
-                      Upload image
+                      <Upload size={14} class="inline mr-1.5" /> Upload background image
                     </button>
                     <input
                       ref={bgFileRef}
                       type="file"
                       accept="image/*"
                       class="hidden"
-                      onChange={(e) => handleBgUpload((e.target as HTMLInputElement).files)}
+                      onChange={(event) => void handleBackgroundUpload((event.target as HTMLInputElement).files)}
                     />
                   </div>
                 )}
