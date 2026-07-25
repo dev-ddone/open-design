@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [preact(), tailwindcss()],
-  build: { outDir: "dist" },
+  build: { outDir: "dist", sourcemap: true },
   resolve: {
     alias: {
       react: "preact/compat",
@@ -14,8 +14,14 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5178,
     proxy: {
-      "/api": "http://localhost:8787",
+      "/api/collaboration": {
+        target: "ws://localhost:3006",
+        ws: true,
+      },
+      "/api": "http://localhost:3006",
+      "/health": "http://localhost:3006",
     },
   },
 });
