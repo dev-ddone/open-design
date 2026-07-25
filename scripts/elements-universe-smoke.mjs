@@ -43,6 +43,14 @@ assert(registry.providers.some((provider) => provider.id === "builtin" && provid
 assert(registry.providers.some((provider) => provider.id === "iconify"), "Iconify provider metadata is missing");
 assert(registry.providers.some((provider) => provider.id === "openverse"), "Openverse provider metadata is missing");
 assert(registry.providers.some((provider) => provider.id === "wikimedia"), "Wikimedia provider metadata is missing");
+assert(registry.providers.some((provider) => provider.id === "pexels"), "Pexels provider metadata is missing");
+assert(registry.providers.some((provider) => provider.id === "pixabay"), "Pixabay provider metadata is missing");
+assert(registry.providers.some((provider) => provider.id === "freesound"), "Freesound provider metadata is missing");
+assert(registry.providers.some((provider) => provider.id === "jamendo"), "Jamendo provider metadata is missing");
+assert(registry.providers.some((provider) => provider.id === "sketchfab"), "Sketchfab provider metadata is missing");
+for (const category of ["shapes", "graphics", "animations", "videos", "audio", "charts", "tables", "modules", "grids", "mockups", "models3d"]) {
+  assert(registry.categories.includes(category), `Category registry is missing ${category}`);
+}
 
 const localizationResponse = await fetch(
   `${BASE_URL}/api/elements-universe/search?providers=openverse&category=frames&q=${encodeURIComponent("cornice dorata floreale")}`,
@@ -62,9 +70,34 @@ const builtins = await getJson(
 assert(Array.isArray(builtins.items) && builtins.items.length > 0, "Built-in federated search returned no ornaments");
 const ornament = builtins.items.find((item) => item.provider === "builtin");
 assert(ornament?.kind === "vector", "Built-in ornament must be vector data");
+assert(ornament?.format === "svg", "Built-in ornament must expose SVG format metadata");
+assert(ornament?.transparent === true, "Built-in ornament must expose transparency metadata");
 assert(typeof ornament.license === "string" && ornament.license.length > 0, "Element license metadata is missing");
 assert(ornament.attributionRequired === false, "Built-in MIT ornament should not require attribution");
 assert(typeof ornament.svg === "string" && ornament.svg.includes("<svg"), "Built-in SVG content is missing");
+
+for (const generatedCategory of ["charts", "tables", "modules", "grids", "mockups", "shapes"]) {
+  const generated = await getJson(
+    `/api/elements-universe/search?providers=builtin&category=${generatedCategory}&page=1&page_size=12`,
+    headers,
+  );
+  assert(generated.items.length > 0, `Generated ${generatedCategory} category returned no elements`);
+  assert(generated.items.every((item) => item.kind === "vector" && item.format === "svg"), `${generatedCategory} must contain editable SVG vectors`);
+  assert(generated.items.every((item) => item.transparent === true && item.recolorable === true), `${generatedCategory} must be transparent and recolorable`);
+}
+
+const svgCharts = await getJson(
+  "/api/elements-universe/search?providers=builtin&category=charts&formats=svg&page=1&page_size=12",
+  headers,
+);
+assert(svgCharts.items.length > 0 && svgCharts.items.every((item) => item.format === "svg"), "SVG format filter did not retain vector charts");
+
+const jpgCharts = await getJson(
+  "/api/elements-universe/search?providers=builtin&category=charts&formats=jpg&page=1&page_size=12",
+  headers,
+);
+assert(Array.isArray(jpgCharts.items) && jpgCharts.items.length === 0, "JPG filter must exclude generated SVG charts");
+assert(jpgCharts.nextPage === null, "An empty format-filtered result must not advertise another page");
 
 const uploads = await getJson(
   "/api/elements-universe/search?providers=uploads&category=all&q=safe&page=1&page_size=12",
@@ -112,6 +145,8 @@ const importedSearch = await getJson(
 );
 const importedResult = importedSearch.items.find((item) => item.id === `uploads:${imported.asset_id}`);
 assert(importedResult, "Persistent imported asset was not indexed by the private provider");
+assert(importedResult.kind === "vector" && importedResult.format === "svg", "Private SVG metadata is incorrect");
+assert(importedResult.transparent === true && importedResult.recolorable === true, "Private SVG must remain transparent and recolorable");
 assert(importedResult.license === "CC BY 4.0", "Private provider lost imported license metadata");
 assert(importedResult.author === "DDone CI Author", "Private provider lost imported author metadata");
 assert(importedResult.sourceUrl === "https://example.com/open-asset-source", "Private provider lost imported source metadata");
@@ -124,4 +159,4 @@ const empty = await getJson(
 assert(Array.isArray(empty.items) && empty.items.length === 0, "Empty searches must return an empty result list");
 assert(empty.nextPage === null, "Empty searches must not advertise another page");
 
-console.log("Federated Elements providers, Italian search, licenses and persistent private imports verified.");
+console.log("Federated Elements providers, categories, format filters, Italian search, licenses and persistent imports verified.");
