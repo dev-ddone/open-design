@@ -3,6 +3,7 @@ import * as fabric from "fabric";
 import { useEditor } from "../context";
 import type { Page } from "../types";
 import { applyEditRules, serializeCanvas } from "../canvas-model";
+import { installSmartGuides } from "../canvas/smart-guides";
 
 interface PageCanvasProps {
   page: Page;
@@ -13,12 +14,14 @@ interface PageCanvasProps {
 }
 
 export function PageCanvas({ page, isActive, width, height, onActivate }: PageCanvasProps) {
-  const { registerCanvas, unregisterCanvas, templateEditRules, readOnly } = useEditor();
+  const { registerCanvas, unregisterCanvas, templateEditRules, readOnly, beginCrop } = useEditor();
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const onActivateRef = useRef(onActivate);
+  const beginCropRef = useRef(beginCrop);
   const loadedJsonRef = useRef<string>("{}");
   onActivateRef.current = onActivate;
+  beginCropRef.current = beginCrop;
 
   useEffect(() => {
     if (!canvasElRef.current || fabricRef.current) return;
@@ -37,12 +40,12 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
 
     const controlStyle = {
       transparentCorners: false,
-      borderColor: "#6366f1",
+      borderColor: "#7c3aed",
       borderScaleFactor: 1.5,
       padding: 6,
       cornerSize: 14,
       cornerColor: "#ffffff",
-      cornerStrokeColor: "#6366f1",
+      cornerStrokeColor: "#7c3aed",
       cornerStyle: "circle" as const,
     };
     const renderCircle = (context: CanvasRenderingContext2D, left: number, top: number) => {
@@ -51,7 +54,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
       context.beginPath();
       context.arc(0, 0, 7, 0, Math.PI * 2);
       context.fillStyle = "#ffffff";
-      context.strokeStyle = "#6366f1";
+      context.strokeStyle = "#7c3aed";
       context.lineWidth = 2;
       context.fill();
       context.stroke();
@@ -69,7 +72,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
       context.beginPath();
       context.roundRect(-pillWidth / 2, -pillHeight / 2, pillWidth, pillHeight, 4);
       context.fillStyle = "#ffffff";
-      context.strokeStyle = "#6366f1";
+      context.strokeStyle = "#7c3aed";
       context.lineWidth = 2;
       context.fill();
       context.stroke();
@@ -89,6 +92,18 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
     };
     canvas.on("object:added", (event) => event.target && applyControls(event.target));
     canvas.on("mouse:down", () => onActivateRef.current());
+    canvas.on("mouse:dblclick", (event) => {
+      const target = event.target;
+      if (!readOnly && target instanceof fabric.FabricImage && target.selectable) {
+        canvas.setActiveObject(target);
+        beginCropRef.current(target);
+      }
+    });
+    const uninstallGuides = installSmartGuides(canvas, {
+      threshold: 7,
+      color: "#d946ef",
+      lineWidth: 1,
+    });
 
     const initial = page.canvas_json && page.canvas_json !== "{}" ? page.canvas_json : "{}";
     loadedJsonRef.current = initial;
@@ -102,6 +117,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
     fabricRef.current = canvas;
     registerCanvas(page.id, canvas);
     return () => {
+      uninstallGuides();
       unregisterCanvas(page.id);
       canvas.dispose();
       fabricRef.current = null;
@@ -129,7 +145,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
 
   return (
     <div
-      class={`relative shadow-lg rounded-lg overflow-visible ${isActive ? "ring-2 ring-[#6366f1]" : ""}`}
+      class={`relative shadow-lg rounded-lg overflow-visible ${isActive ? "ring-2 ring-[#7c3aed]" : ""}`}
       style={{ width, height }}
     >
       <canvas ref={canvasElRef} />
