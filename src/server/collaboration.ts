@@ -1,8 +1,8 @@
 import type { Server } from "node:http";
 import type { Duplex } from "node:stream";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocketServer } from "ws";
 import * as Y from "yjs";
-import { setPersistence, setupWSConnection } from "y-websocket/bin/utils.js";
+import { createYjsServer, type IWebSocket } from "yjs-server";
 import { canAccessDesign, tokenFromCookieHeader, verifySessionToken } from "./auth.js";
 import { one, pool } from "./db.js";
 
@@ -19,34 +19,46 @@ async function persistDocument(room: string, doc: Y.Doc): Promise<void> {
   );
 }
 
-setPersistence({
-  bindState: async (room: string, doc: Y.Doc) => {
-    const stored = await one<{ state: Buffer }>(
-      "SELECT state FROM collaboration_documents WHERE room = $1",
-      [room],
-    );
-    if (stored?.state) Y.applyUpdate(doc, new Uint8Array(stored.state));
-
-    doc.on("update", () => {
-      const previous = saveTimers.get(room);
-      if (previous) clearTimeout(previous);
-      saveTimers.set(
-        room,
-        setTimeout(() => {
-          saveTimers.delete(room);
-          persistDocument(room, doc).catch((error) =>
-            console.error(`Unable to persist collaboration room ${room}`, error),
-          );
-        }, 750),
+function schedulePersistence(room: string, doc: Y.Doc): void {
+  const previous = saveTimers.get(room);
+  if (previous) clearTimeout(previous);
+  saveTimers.set(
+    room,
+    setTimeout(() => {
+      saveTimers.delete(room);
+      persistDocument(room, doc).catch((error) =>
+        console.error(`Unable to persist collaboration room ${room}`, error),
       );
-    });
+    }, 750),
+  );
+}
+
+const collaborationServer = createYjsServer({
+  createDoc: () => new Y.Doc(),
+  docNameFromRequest: (request) => {
+    const url = new URL(request.url ?? "/", "http://localhost");
+    const match = url.pathname.match(/^\/api\/collaboration\/([0-9a-f-]+)$/i);
+    return match ? `design:${match[1]}` : undefined;
   },
-  writeState: async (room: string, doc: Y.Doc) => {
-    const timer = saveTimers.get(room);
-    if (timer) clearTimeout(timer);
-    saveTimers.delete(room);
-    await persistDocument(room, doc);
+  docStorage: {
+    loadDoc: async (room, doc) => {
+      const stored = await one<{ state: Buffer }>(
+        "SELECT state FROM collaboration_documents WHERE room = $1",
+        [room],
+      );
+      if (stored?.state) Y.applyUpdate(doc, new Uint8Array(stored.state));
+    },
+    onUpdate: async (room, _update, doc) => {
+      schedulePersistence(room, doc);
+    },
+    storeDoc: async (room, doc) => {
+      const timer = saveTimers.get(room);
+      if (timer) clearTimeout(timer);
+      saveTimers.delete(room);
+      await persistDocument(room, doc);
+    },
   },
+  pingTimeoutMs: 30_000,
 });
 
 function rejectUpgrade(socket: Duplex, status: number, message: string): void {
@@ -56,8 +68,13 @@ function rejectUpgrade(socket: Duplex, status: number, message: string): void {
   socket.destroy();
 }
 
-export function installCollaborationServer(server: Server): void {
-  const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+export function installCollaborationServer(server: Server): () => void {
+  const wss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+    clientTracking: true,
+    maxPayload: 10 * 1024 * 1024,
+  });
 
   server.on("upgrade", async (request, socket, head) => {
     try {
@@ -73,9 +90,8 @@ export function installCollaborationServer(server: Server): void {
       const access = await canAccessDesign(user.id, designId, "VIEWER");
       if (!access) return rejectUpgrade(socket, 403, "Forbidden");
 
-      const room = `design:${designId}`;
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        setupWSConnection(ws, request, { docName: room, gc: true });
+      wss.handleUpgrade(request, socket, head, (webSocket) => {
+        collaborationServer.handleConnection(webSocket as unknown as IWebSocket, request);
       });
     } catch (error) {
       console.error("WebSocket upgrade failed", error);
@@ -83,10 +99,8 @@ export function installCollaborationServer(server: Server): void {
     }
   });
 
-  const heartbeat = setInterval(() => {
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.ping();
-    }
-  }, 30_000);
-  wss.on("close", () => clearInterval(heartbeat));
+  return () => {
+    collaborationServer.close(1001, 1_000);
+    wss.close();
+  };
 }
