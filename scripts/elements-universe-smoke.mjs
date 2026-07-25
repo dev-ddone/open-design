@@ -44,6 +44,17 @@ assert(registry.providers.some((provider) => provider.id === "iconify"), "Iconif
 assert(registry.providers.some((provider) => provider.id === "openverse"), "Openverse provider metadata is missing");
 assert(registry.providers.some((provider) => provider.id === "wikimedia"), "Wikimedia provider metadata is missing");
 
+const localizationResponse = await fetch(
+  `${BASE_URL}/api/elements-universe/search?providers=openverse&category=frames&q=${encodeURIComponent("cornice dorata floreale")}`,
+  { headers, redirect: "manual" },
+);
+assert(localizationResponse.status === 307, "Italian search terms must be expanded through a temporary redirect");
+const localizationTarget = new URL(localizationResponse.headers.get("location"), BASE_URL);
+assert(localizationTarget.searchParams.get("_localized") === "1", "Localized request marker is missing");
+const translatedQuery = localizationTarget.searchParams.get("q") ?? "";
+assert(translatedQuery.includes("frame") && translatedQuery.includes("gold") && translatedQuery.includes("floral"), "Italian search translation is incomplete");
+assert(!translatedQuery.includes("cornice"), "Italian terms must be replaced instead of overconstraining global search");
+
 const builtins = await getJson(
   "/api/elements-universe/search?providers=builtin&category=ornaments&q=floral&page=1&page_size=12",
   headers,
@@ -69,4 +80,4 @@ const empty = await getJson(
 assert(Array.isArray(empty.items) && empty.items.length === 0, "Empty searches must return an empty result list");
 assert(empty.nextPage === null, "Empty searches must not advertise another page");
 
-console.log("Federated Elements provider registry, built-ins, licenses and private assets verified.");
+console.log("Federated Elements providers, Italian query expansion, licenses and private assets verified.");
