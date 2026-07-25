@@ -1,15 +1,24 @@
 import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
-import app from "./index.js";
+import app from "./platform-app.js";
 import { installCollaborationServer } from "./collaboration.js";
 import { config } from "./config.js";
 import { bootstrapAdmin, closeDatabase, migrate } from "./db.js";
+import { verifyEmailTransport } from "./mailer.js";
 import { initializeStorage } from "./storage.js";
 
 async function main(): Promise<void> {
   await migrate();
   await bootstrapAdmin();
   await initializeStorage();
+  if (config.email.delivery === "smtp") {
+    try {
+      await verifyEmailTransport();
+      console.info("SMTP transport verified");
+    } catch (error) {
+      console.error("SMTP verification failed; email workflows will return an error", error);
+    }
+  }
 
   const server = serve(
     {
