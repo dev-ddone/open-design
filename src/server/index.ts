@@ -1,381 +1,733 @@
-import { createApp, createRoute, z } from "@clawnify/app";
-import { query, get, run } from "./db.js";
-import { putUpload, getUpload } from "./uploads.js";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import bcrypt from "bcryptjs";
+import { Hono } from "hono";
+import { deleteCookie, setCookie } from "hono/cookie";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { z } from "zod";
+import {
+  type AppVariables,
+  type Role,
+  createSessionToken,
+  getMemberships,
+  requireAuth,
+  requireOrganization,
+  requireRole,
+} from "./auth.js";
+import { config } from "./config.js";
+import { one, pool, query, transaction } from "./db.js";
+import { fetchIconifySvg, searchBuiltins, searchIconify } from "./elements.js";
+import { getObject, putObject } from "./storage.js";
 
-type Env = { Bindings: { DB: D1Database } };
+const app = new Hono<{ Variables: AppVariables }>();
 
-const app = createApp<Env>({ title: "Design App API", version: "1.0.0" });
+function slugify(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "workspace";
+}
 
-// ── Schemas ──────────────────────────────────────────────────────────
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: config.isProduction,
+    sameSite: "Lax" as const,
+    path: "/",
+    maxAge: config.sessionTtlDays * 24 * 60 * 60,
+  };
+}
 
-const DesignSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  canvas_json: z.string(),
-  width: z.number(),
-  height: z.number(),
-  thumbnail_url: z.string().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
+async function body<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> {
+  const parsed = schema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    const message = parsed.error.issues.map((issue) => issue.message).join(", ");
+    throw new HTTPError(400, message);
+  }
+  return parsed.data;
+}
+
+class HTTPError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+app.onError((error, c) => {
+  if (error instanceof HTTPError) {
+    return c.json({ error: error.message }, error.status as 400);
+  }
+  console.error(error);
+  return c.json({ error: "Internal server error" }, 500);
 });
 
-const TemplateSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  category: z.string(),
-  canvas_json: z.string(),
-  width: z.number(),
-  height: z.number(),
-  thumbnail_url: z.string().nullable(),
-  sort_order: z.number(),
+app.get("/health", async (c) => {
+  await pool.query("SELECT 1");
+  return c.json({ status: "ok", version: "2.0.0-alpha.1" });
 });
 
-const PageSchema = z.object({
-  id: z.string(),
-  design_id: z.string(),
-  title: z.string(),
-  canvas_json: z.string(),
-  sort_order: z.number(),
-  created_at: z.string(),
+// ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+const credentialsSchema = z.object({
+  email: z.string().email().transform((value) => value.toLowerCase()),
+  password: z.string().min(8).max(72),
 });
 
-const DesignWithPagesSchema = DesignSchema.extend({
-  pages: z.array(PageSchema),
-});
-
-const ErrorSchema = z.object({ error: z.string() });
-
-// ── List designs ────────────────────────────────────────────────────
-
-const listDesigns = createRoute({
-  method: "get",
-  path: "/api/designs",
-  responses: { 200: { content: { "application/json": { schema: z.array(DesignSchema) } }, description: "OK" } },
-});
-
-app.openapi(listDesigns, async (c) => {
-  const rows = await query<z.infer<typeof DesignSchema>>("SELECT * FROM designs ORDER BY updated_at DESC");
-  return c.json(rows, 200);
-});
-
-// ── Get design ──────────────────────────────────────────────────────
-
-const getDesign = createRoute({
-  method: "get",
-  path: "/api/designs/{id}",
-  request: { params: z.object({ id: z.string() }) },
-  responses: {
-    200: { content: { "application/json": { schema: DesignWithPagesSchema } }, description: "OK" },
-    404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
-  },
-});
-
-app.openapi(getDesign, async (c) => {
-  const { id } = c.req.valid("param");
-  const row = await get<z.infer<typeof DesignSchema>>("SELECT * FROM designs WHERE id = ?", [id]);
-  if (!row) return c.json({ error: "Not found" }, 404);
-  const pages = await query<z.infer<typeof PageSchema>>(
-    "SELECT * FROM pages WHERE design_id = ? ORDER BY sort_order",
-    [id]
+app.post("/api/auth/register", async (c) => {
+  const input = await body(
+    c,
+    credentialsSchema.extend({
+      name: z.string().trim().min(2).max(80),
+      organizationName: z.string().trim().min(2).max(100),
+    }),
   );
-  return c.json({ ...row, pages }, 200);
-});
 
-// ── Create design ───────────────────────────────────────────────────
+  const userCount = await one<{ count: string }>("SELECT COUNT(*)::text AS count FROM users");
+  if (!config.registrationEnabled && Number(userCount?.count ?? 0) > 0) {
+    throw new HTTPError(403, "Registration is disabled");
+  }
+  if (await one("SELECT id FROM users WHERE email = $1", [input.email])) {
+    throw new HTTPError(409, "An account with this email already exists");
+  }
 
-const createDesign = createRoute({
-  method: "post",
-  path: "/api/designs",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            name: z.string().optional(),
-            canvas_json: z.string().optional(),
-            width: z.number().optional(),
-            height: z.number().optional(),
-          }),
-        },
-      },
-    },
-  },
-  responses: { 200: { content: { "application/json": { schema: DesignSchema } }, description: "OK" } },
-});
-
-app.openapi(createDesign, async (c) => {
-  const { name, canvas_json, width, height } = c.req.valid("json");
-  const canvasData = canvas_json || "{}";
-  await run(
-    "INSERT INTO designs (name, canvas_json, width, height) VALUES (?, ?, ?, ?)",
-    [name || "Untitled Design", canvasData, width || 1080, height || 1080]
-  );
-  const row = await get<z.infer<typeof DesignSchema>>("SELECT * FROM designs ORDER BY created_at DESC LIMIT 1");
-  // Auto-create first page
-  await run(
-    "INSERT INTO pages (design_id, title, canvas_json, sort_order) VALUES (?, ?, ?, ?)",
-    [row!.id, "Page 1", canvasData, 0]
-  );
-  return c.json(row!, 200);
-});
-
-// ── Update design ───────────────────────────────────────────────────
-
-const updateDesign = createRoute({
-  method: "put",
-  path: "/api/designs/{id}",
-  request: {
-    params: z.object({ id: z.string() }),
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            name: z.string().optional(),
-            canvas_json: z.string().optional(),
-            width: z.number().optional(),
-            height: z.number().optional(),
-            thumbnail_url: z.string().optional(),
-          }),
-        },
-      },
-    },
-  },
-  responses: {
-    200: { content: { "application/json": { schema: DesignSchema } }, description: "OK" },
-    404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
-  },
-});
-
-app.openapi(updateDesign, async (c) => {
-  const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const existing = await get<z.infer<typeof DesignSchema>>("SELECT * FROM designs WHERE id = ?", [id]);
-  if (!existing) return c.json({ error: "Not found" }, 404);
-
-  await run(
-    `UPDATE designs SET name = ?, canvas_json = ?, width = ?, height = ?, thumbnail_url = ?, updated_at = datetime('now') WHERE id = ?`,
-    [body.name ?? existing.name, body.canvas_json ?? existing.canvas_json, body.width ?? existing.width, body.height ?? existing.height, body.thumbnail_url ?? existing.thumbnail_url, id]
-  );
-  const row = await get<z.infer<typeof DesignSchema>>("SELECT * FROM designs WHERE id = ?", [id]);
-  return c.json(row!, 200);
-});
-
-// ── Delete design ───────────────────────────────────────────────────
-
-const deleteDesign = createRoute({
-  method: "delete",
-  path: "/api/designs/{id}",
-  request: { params: z.object({ id: z.string() }) },
-  responses: {
-    200: { content: { "application/json": { schema: z.object({ ok: z.boolean() }) } }, description: "OK" },
-  },
-});
-
-app.openapi(deleteDesign, async (c) => {
-  const { id } = c.req.valid("param");
-  await run("DELETE FROM designs WHERE id = ?", [id]);
-  return c.json({ ok: true }, 200);
-});
-
-// ── Add page ───────────────────────────────────────────────────────
-
-const addPage = createRoute({
-  method: "post",
-  path: "/api/designs/{id}/pages",
-  request: {
-    params: z.object({ id: z.string() }),
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            title: z.string().optional(),
-            canvas_json: z.string().optional(),
-            after_sort_order: z.number().optional(),
-          }),
-        },
-      },
-    },
-  },
-  responses: { 200: { content: { "application/json": { schema: PageSchema } }, description: "OK" } },
-});
-
-app.openapi(addPage, async (c) => {
-  const { id } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const count = await get<{ c: number }>("SELECT COUNT(*) as c FROM pages WHERE design_id = ?", [id]);
-  const title = body.title || `Page ${(count?.c ?? 0) + 1}`;
-
-  let insertOrder: number;
-  if (body.after_sort_order !== undefined) {
-    await run(
-      "UPDATE pages SET sort_order = sort_order + 1 WHERE design_id = ? AND sort_order > ?",
-      [id, body.after_sort_order]
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const user = await transaction(async (client) => {
+    const createdUser = await client.query<{ id: string; email: string; name: string }>(
+      `INSERT INTO users(email, name, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, name`,
+      [input.email, input.name, passwordHash],
     );
-    insertOrder = body.after_sort_order + 1;
-  } else {
-    const maxOrder = await get<{ m: number }>("SELECT COALESCE(MAX(sort_order), -1) as m FROM pages WHERE design_id = ?", [id]);
-    insertOrder = (maxOrder?.m ?? -1) + 1;
-  }
-
-  await run(
-    "INSERT INTO pages (design_id, title, canvas_json, sort_order) VALUES (?, ?, ?, ?)",
-    [id, title, body.canvas_json || "{}", insertOrder]
-  );
-  const page = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE design_id = ? ORDER BY created_at DESC LIMIT 1", [id]);
-  return c.json(page!, 200);
-});
-
-// ── Duplicate page ─────────────────────────────────────────────────
-
-const duplicatePage = createRoute({
-  method: "post",
-  path: "/api/pages/{pageId}/duplicate",
-  request: { params: z.object({ pageId: z.string() }) },
-  responses: {
-    200: { content: { "application/json": { schema: PageSchema } }, description: "OK" },
-    404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
-  },
-});
-
-app.openapi(duplicatePage, async (c) => {
-  const { pageId } = c.req.valid("param");
-  const original = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE id = ?", [pageId]);
-  if (!original) return c.json({ error: "Not found" }, 404);
-  // Shift sort_order of pages after the original
-  await run(
-    "UPDATE pages SET sort_order = sort_order + 1 WHERE design_id = ? AND sort_order > ?",
-    [original.design_id, original.sort_order]
-  );
-  await run(
-    "INSERT INTO pages (design_id, title, canvas_json, sort_order) VALUES (?, ?, ?, ?)",
-    [original.design_id, `${original.title} (copy)`, original.canvas_json, original.sort_order + 1]
-  );
-  const page = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE design_id = ? AND sort_order = ?", [original.design_id, original.sort_order + 1]);
-  return c.json(page!, 200);
-});
-
-// ── Update page ────────────────────────────────────────────────────
-
-const updatePage = createRoute({
-  method: "put",
-  path: "/api/pages/{pageId}",
-  request: {
-    params: z.object({ pageId: z.string() }),
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            title: z.string().optional(),
-            canvas_json: z.string().optional(),
-          }),
-        },
-      },
-    },
-  },
-  responses: {
-    200: { content: { "application/json": { schema: PageSchema } }, description: "OK" },
-    404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
-  },
-});
-
-app.openapi(updatePage, async (c) => {
-  const { pageId } = c.req.valid("param");
-  const body = c.req.valid("json");
-  const existing = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE id = ?", [pageId]);
-  if (!existing) return c.json({ error: "Not found" }, 404);
-  await run(
-    "UPDATE pages SET title = ?, canvas_json = ? WHERE id = ?",
-    [body.title ?? existing.title, body.canvas_json ?? existing.canvas_json, pageId]
-  );
-  const page = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE id = ?", [pageId]);
-  return c.json(page!, 200);
-});
-
-// ── Delete page ────────────────────────────────────────────────────
-
-const deletePage = createRoute({
-  method: "delete",
-  path: "/api/pages/{pageId}",
-  request: { params: z.object({ pageId: z.string() }) },
-  responses: {
-    200: { content: { "application/json": { schema: z.object({ ok: z.boolean() }) } }, description: "OK" },
-    400: { content: { "application/json": { schema: ErrorSchema } }, description: "Cannot delete last page" },
-  },
-});
-
-app.openapi(deletePage, async (c) => {
-  const { pageId } = c.req.valid("param");
-  const page = await get<z.infer<typeof PageSchema>>("SELECT * FROM pages WHERE id = ?", [pageId]);
-  if (!page) return c.json({ ok: true }, 200);
-  const count = await get<{ c: number }>("SELECT COUNT(*) as c FROM pages WHERE design_id = ?", [page.design_id]);
-  if ((count?.c ?? 0) <= 1) return c.json({ error: "Cannot delete the last page" }, 400);
-  await run("DELETE FROM pages WHERE id = ?", [pageId]);
-  return c.json({ ok: true }, 200);
-});
-
-// ── List templates ──────────────────────────────────────────────────
-
-const listTemplates = createRoute({
-  method: "get",
-  path: "/api/templates",
-  responses: { 200: { content: { "application/json": { schema: z.array(TemplateSchema) } }, description: "OK" } },
-});
-
-app.openapi(listTemplates, async (c) => {
-  const rows = await query<z.infer<typeof TemplateSchema>>("SELECT * FROM templates ORDER BY sort_order");
-  return c.json(rows, 200);
-});
-
-// ── Get template ────────────────────────────────────────────────────
-
-const getTemplate = createRoute({
-  method: "get",
-  path: "/api/templates/{id}",
-  request: { params: z.object({ id: z.string() }) },
-  responses: {
-    200: { content: { "application/json": { schema: TemplateSchema } }, description: "OK" },
-    404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
-  },
-});
-
-app.openapi(getTemplate, async (c) => {
-  const { id } = c.req.valid("param");
-  const row = await get<z.infer<typeof TemplateSchema>>("SELECT * FROM templates WHERE id = ?", [id]);
-  if (!row) return c.json({ error: "Not found" }, 404);
-  return c.json(row, 200);
-});
-
-// ── File uploads ────────────────────────────────────────────────────
-
-app.post("/api/uploads", async (c) => {
-  const body = await c.req.parseBody();
-  const file = body["file"];
-  if (!file || typeof file === "string") {
-    return c.json({ error: "No file provided" }, 400);
-  }
-
-  const ext = file.name?.split(".").pop()?.toLowerCase() || "png";
-  const allowed = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
-  if (!allowed.has(ext)) {
-    return c.json({ error: "Unsupported file type" }, 400);
-  }
-
-  const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const data = await file.arrayBuffer();
-  const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : ext === "svg" ? "image/svg+xml" : "image/png";
-  const url = await putUpload(filename, data, mime);
-
-  return c.json({ url }, 200);
-});
-
-app.get("/api/uploads/:filename", async (c) => {
-  const { filename } = c.req.param();
-  const result = await getUpload(filename);
-  if (!result) return c.json({ error: "Not found" }, 404);
-
-  return new Response(result.data, {
-    headers: { "Content-Type": result.contentType, "Cache-Control": "public, max-age=31536000" },
+    const userRow = createdUser.rows[0];
+    const organization = await client.query<{ id: string }>(
+      `INSERT INTO organizations(name, slug, created_by)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [
+        input.organizationName,
+        `${slugify(input.organizationName)}-${crypto.randomUUID().slice(0, 6)}`,
+        userRow.id,
+      ],
+    );
+    await client.query(
+      `INSERT INTO organization_members(organization_id, user_id, role)
+       VALUES ($1, $2, 'OWNER')`,
+      [organization.rows[0].id, userRow.id],
+    );
+    return userRow;
   });
+
+  setCookie(c, config.sessionCookieName, await createSessionToken(user), sessionCookieOptions());
+  return c.json({ user, organizations: await getMemberships(user.id) }, 201);
+});
+
+app.post("/api/auth/login", async (c) => {
+  const input = await body(c, credentialsSchema);
+  const user = await one<{
+    id: string;
+    email: string;
+    name: string;
+    password_hash: string;
+    disabled: boolean;
+  }>("SELECT id, email, name, password_hash, disabled FROM users WHERE email = $1", [input.email]);
+  if (!user || user.disabled || !(await bcrypt.compare(input.password, user.password_hash))) {
+    throw new HTTPError(401, "Invalid email or password");
+  }
+  const sessionUser = { id: user.id, email: user.email, name: user.name };
+  setCookie(
+    c,
+    config.sessionCookieName,
+    await createSessionToken(sessionUser),
+    sessionCookieOptions(),
+  );
+  return c.json({ user: sessionUser, organizations: await getMemberships(user.id) });
+});
+
+app.post("/api/auth/logout", (c) => {
+  deleteCookie(c, config.sessionCookieName, { path: "/" });
+  return c.json({ ok: true });
+});
+
+app.get("/api/auth/me", requireAuth, async (c) => {
+  const user = c.get("user");
+  return c.json({ user, organizations: await getMemberships(user.id) });
+});
+
+// ---------------------------------------------------------------------------
+// Organizations, users, roles and clients
+// ---------------------------------------------------------------------------
+
+app.get("/api/organizations", requireAuth, async (c) => {
+  return c.json(await getMemberships(c.get("user").id));
+});
+
+app.post("/api/organizations", requireAuth, async (c) => {
+  const input = await body(c, z.object({ name: z.string().trim().min(2).max(100) }));
+  const user = c.get("user");
+  const organization = await transaction(async (client) => {
+    const created = await client.query<{ id: string; name: string; slug: string }>(
+      `INSERT INTO organizations(name, slug, created_by)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, slug`,
+      [input.name, `${slugify(input.name)}-${crypto.randomUUID().slice(0, 6)}`, user.id],
+    );
+    await client.query(
+      `INSERT INTO organization_members(organization_id, user_id, role)
+       VALUES ($1, $2, 'OWNER')`,
+      [created.rows[0].id, user.id],
+    );
+    return { ...created.rows[0], role: "OWNER" as Role };
+  });
+  return c.json(organization, 201);
+});
+
+app.get(
+  "/api/organization/members",
+  requireAuth,
+  requireOrganization,
+  requireRole("ADMIN"),
+  async (c) => {
+    return c.json(
+      await query(
+        `SELECT u.id, u.email, u.name, om.role, om.created_at
+           FROM organization_members om
+           JOIN users u ON u.id = om.user_id
+          WHERE om.organization_id = $1
+          ORDER BY u.name`,
+        [c.get("organizationId")],
+      ),
+    );
+  },
+);
+
+app.post(
+  "/api/organization/members",
+  requireAuth,
+  requireOrganization,
+  requireRole("ADMIN"),
+  async (c) => {
+    const input = await body(
+      c,
+      z.object({
+        email: z.string().email().transform((value) => value.toLowerCase()),
+        role: z.enum(["ADMIN", "EDITOR", "VIEWER"]),
+      }),
+    );
+    const user = await one<{ id: string }>("SELECT id FROM users WHERE email = $1", [input.email]);
+    if (!user) throw new HTTPError(404, "The user must register before being added");
+    await pool.query(
+      `INSERT INTO organization_members(organization_id, user_id, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (organization_id, user_id)
+       DO UPDATE SET role = EXCLUDED.role`,
+      [c.get("organizationId"), user.id, input.role],
+    );
+    return c.json({ ok: true }, 201);
+  },
+);
+
+app.get("/api/clients", requireAuth, requireOrganization, async (c) => {
+  return c.json(
+    await query("SELECT * FROM clients WHERE organization_id = $1 ORDER BY name", [
+      c.get("organizationId"),
+    ]),
+  );
+});
+
+app.post(
+  "/api/clients",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const input = await body(
+      c,
+      z.object({ name: z.string().trim().min(2).max(120), notes: z.string().max(4000).optional() }),
+    );
+    const client = await one(
+      `INSERT INTO clients(organization_id, name, slug, notes)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [
+        c.get("organizationId"),
+        input.name,
+        `${slugify(input.name)}-${crypto.randomUUID().slice(0, 5)}`,
+        input.notes ?? null,
+      ],
+    );
+    return c.json(client, 201);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Designs and pages. Response shapes remain compatible with the original UI.
+// ---------------------------------------------------------------------------
+
+app.get("/api/designs", requireAuth, requireOrganization, async (c) => {
+  return c.json(
+    await query(
+      `SELECT id, organization_id, client_id, name, canvas_json, width, height,
+              thumbnail_url, created_at, updated_at
+         FROM designs
+        WHERE organization_id = $1
+        ORDER BY updated_at DESC`,
+      [c.get("organizationId")],
+    ),
+  );
+});
+
+app.post(
+  "/api/designs",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const input = await body(
+      c,
+      z.object({
+        name: z.string().trim().min(1).max(180).optional(),
+        canvas_json: z.string().optional(),
+        width: z.number().int().min(64).max(16000).optional(),
+        height: z.number().int().min(64).max(16000).optional(),
+        client_id: z.string().uuid().nullable().optional(),
+      }),
+    );
+    const organizationId = c.get("organizationId");
+    if (input.client_id) {
+      const client = await one(
+        "SELECT id FROM clients WHERE id = $1 AND organization_id = $2",
+        [input.client_id, organizationId],
+      );
+      if (!client) throw new HTTPError(400, "Invalid client");
+    }
+    const canvasJson = input.canvas_json ?? "{}";
+    const design = await transaction(async (client) => {
+      const created = await client.query<any>(
+        `INSERT INTO designs(
+           organization_id, client_id, created_by, name, canvas_json, width, height
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          organizationId,
+          input.client_id ?? null,
+          c.get("user").id,
+          input.name ?? "Untitled Design",
+          canvasJson,
+          input.width ?? 1080,
+          input.height ?? 1080,
+        ],
+      );
+      await client.query(
+        `INSERT INTO pages(design_id, title, canvas_json, sort_order)
+         VALUES ($1, 'Page 1', $2, 0)`,
+        [created.rows[0].id, canvasJson],
+      );
+      return created.rows[0];
+    });
+    return c.json(design, 201);
+  },
+);
+
+app.get("/api/designs/:id", requireAuth, requireOrganization, async (c) => {
+  const design = await one<any>(
+    "SELECT * FROM designs WHERE id = $1 AND organization_id = $2",
+    [c.req.param("id"), c.get("organizationId")],
+  );
+  if (!design) throw new HTTPError(404, "Design not found");
+  const pages = await query(
+    "SELECT * FROM pages WHERE design_id = $1 ORDER BY sort_order, created_at",
+    [design.id],
+  );
+  return c.json({ ...design, pages });
+});
+
+app.put(
+  "/api/designs/:id",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const input = await body(
+      c,
+      z.object({
+        name: z.string().trim().min(1).max(180).optional(),
+        canvas_json: z.string().optional(),
+        width: z.number().int().min(64).max(16000).optional(),
+        height: z.number().int().min(64).max(16000).optional(),
+        thumbnail_url: z.string().nullable().optional(),
+        client_id: z.string().uuid().nullable().optional(),
+      }),
+    );
+    const existing = await one<any>(
+      "SELECT * FROM designs WHERE id = $1 AND organization_id = $2",
+      [c.req.param("id"), c.get("organizationId")],
+    );
+    if (!existing) throw new HTTPError(404, "Design not found");
+    const updated = await one(
+      `UPDATE designs
+          SET name = $1, canvas_json = $2, width = $3, height = $4,
+              thumbnail_url = $5, client_id = $6, updated_at = now()
+        WHERE id = $7 AND organization_id = $8
+        RETURNING *`,
+      [
+        input.name ?? existing.name,
+        input.canvas_json ?? existing.canvas_json,
+        input.width ?? existing.width,
+        input.height ?? existing.height,
+        input.thumbnail_url === undefined ? existing.thumbnail_url : input.thumbnail_url,
+        input.client_id === undefined ? existing.client_id : input.client_id,
+        existing.id,
+        c.get("organizationId"),
+      ],
+    );
+    return c.json(updated);
+  },
+);
+
+app.delete(
+  "/api/designs/:id",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const result = await pool.query(
+      "DELETE FROM designs WHERE id = $1 AND organization_id = $2",
+      [c.req.param("id"), c.get("organizationId")],
+    );
+    if (result.rowCount === 0) throw new HTTPError(404, "Design not found");
+    return c.json({ ok: true });
+  },
+);
+
+async function pageForOrganization(pageId: string, organizationId: string) {
+  return one<any>(
+    `SELECT p.* FROM pages p
+      JOIN designs d ON d.id = p.design_id
+     WHERE p.id = $1 AND d.organization_id = $2`,
+    [pageId, organizationId],
+  );
+}
+
+app.post(
+  "/api/designs/:id/pages",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const design = await one(
+      "SELECT id FROM designs WHERE id = $1 AND organization_id = $2",
+      [c.req.param("id"), c.get("organizationId")],
+    );
+    if (!design) throw new HTTPError(404, "Design not found");
+    const input = await body(
+      c,
+      z.object({
+        title: z.string().trim().max(120).optional(),
+        canvas_json: z.string().optional(),
+        after_sort_order: z.number().int().optional(),
+      }),
+    );
+    const page = await transaction(async (client) => {
+      let order: number;
+      if (input.after_sort_order !== undefined) {
+        await client.query(
+          "UPDATE pages SET sort_order = sort_order + 1 WHERE design_id = $1 AND sort_order > $2",
+          [c.req.param("id"), input.after_sort_order],
+        );
+        order = input.after_sort_order + 1;
+      } else {
+        const maximum = await client.query<{ value: number }>(
+          "SELECT COALESCE(MAX(sort_order), -1)::int AS value FROM pages WHERE design_id = $1",
+          [c.req.param("id")],
+        );
+        order = maximum.rows[0].value + 1;
+      }
+      const count = await client.query<{ value: number }>(
+        "SELECT COUNT(*)::int AS value FROM pages WHERE design_id = $1",
+        [c.req.param("id")],
+      );
+      const created = await client.query<any>(
+        `INSERT INTO pages(design_id, title, canvas_json, sort_order)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [
+          c.req.param("id"),
+          input.title ?? `Page ${count.rows[0].value + 1}`,
+          input.canvas_json ?? "{}",
+          order,
+        ],
+      );
+      return created.rows[0];
+    });
+    return c.json(page, 201);
+  },
+);
+
+app.post(
+  "/api/pages/:pageId/duplicate",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const original = await pageForOrganization(c.req.param("pageId"), c.get("organizationId"));
+    if (!original) throw new HTTPError(404, "Page not found");
+    const page = await transaction(async (client) => {
+      await client.query(
+        "UPDATE pages SET sort_order = sort_order + 1 WHERE design_id = $1 AND sort_order > $2",
+        [original.design_id, original.sort_order],
+      );
+      const created = await client.query<any>(
+        `INSERT INTO pages(design_id, title, canvas_json, sort_order)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [
+          original.design_id,
+          `${original.title} (copy)`,
+          original.canvas_json,
+          original.sort_order + 1,
+        ],
+      );
+      return created.rows[0];
+    });
+    return c.json(page, 201);
+  },
+);
+
+app.put(
+  "/api/pages/:pageId",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const existing = await pageForOrganization(c.req.param("pageId"), c.get("organizationId"));
+    if (!existing) throw new HTTPError(404, "Page not found");
+    const input = await body(
+      c,
+      z.object({ title: z.string().trim().max(120).optional(), canvas_json: z.string().optional() }),
+    );
+    const updated = await one(
+      `UPDATE pages
+          SET title = $1, canvas_json = $2, updated_at = now()
+        WHERE id = $3
+        RETURNING *`,
+      [input.title ?? existing.title, input.canvas_json ?? existing.canvas_json, existing.id],
+    );
+    await pool.query("UPDATE designs SET updated_at = now() WHERE id = $1", [existing.design_id]);
+    return c.json(updated);
+  },
+);
+
+app.delete(
+  "/api/pages/:pageId",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const page = await pageForOrganization(c.req.param("pageId"), c.get("organizationId"));
+    if (!page) throw new HTTPError(404, "Page not found");
+    const count = await one<{ value: number }>(
+      "SELECT COUNT(*)::int AS value FROM pages WHERE design_id = $1",
+      [page.design_id],
+    );
+    if ((count?.value ?? 0) <= 1) throw new HTTPError(400, "Cannot delete the last page");
+    await pool.query("DELETE FROM pages WHERE id = $1", [page.id]);
+    return c.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Templates and brand kits
+// ---------------------------------------------------------------------------
+
+app.get("/api/templates", requireAuth, requireOrganization, async (c) => {
+  return c.json(
+    await query(
+      `SELECT id, name, category, canvas_json, width, height, thumbnail_url, sort_order,
+              organization_id, client_id, is_locked
+         FROM templates
+        WHERE organization_id IS NULL OR organization_id = $1
+        ORDER BY sort_order, name`,
+      [c.get("organizationId")],
+    ),
+  );
+});
+
+app.get("/api/templates/:id", requireAuth, requireOrganization, async (c) => {
+  const template = await one(
+    `SELECT * FROM templates
+      WHERE id = $1 AND (organization_id IS NULL OR organization_id = $2)`,
+    [c.req.param("id"), c.get("organizationId")],
+  );
+  if (!template) throw new HTTPError(404, "Template not found");
+  return c.json(template);
+});
+
+app.get("/api/brand-kits", requireAuth, requireOrganization, async (c) => {
+  return c.json(
+    await query("SELECT * FROM brand_kits WHERE organization_id = $1 ORDER BY name", [
+      c.get("organizationId"),
+    ]),
+  );
+});
+
+app.post(
+  "/api/brand-kits",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const input = await body(
+      c,
+      z.object({
+        name: z.string().trim().min(1).max(100),
+        client_id: z.string().uuid().nullable().optional(),
+        colors: z.array(z.string()).default([]),
+        fonts: z.array(z.string()).default([]),
+        logos: z.array(z.string()).default([]),
+      }),
+    );
+    const kit = await one(
+      `INSERT INTO brand_kits(organization_id, client_id, name, colors, fonts, logos)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)
+       RETURNING *`,
+      [
+        c.get("organizationId"),
+        input.client_id ?? null,
+        input.name,
+        JSON.stringify(input.colors),
+        JSON.stringify(input.fonts),
+        JSON.stringify(input.logos),
+      ],
+    );
+    return c.json(kit, 201);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Asset upload and retrieval
+// ---------------------------------------------------------------------------
+
+app.get("/api/assets", requireAuth, requireOrganization, async (c) => {
+  const category = c.req.query("category");
+  const search = c.req.query("q")?.trim();
+  const values: unknown[] = [c.get("organizationId")];
+  const filters = ["organization_id = $1"];
+  if (category) {
+    values.push(category);
+    filters.push(`category = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    filters.push(`(name ILIKE $${values.length} OR array_to_string(tags, ' ') ILIKE $${values.length})`);
+  }
+  return c.json(
+    await query(
+      `SELECT id, client_id, name, category, tags, mime_type, size_bytes, license,
+              author, source_url, attribution_required, created_at,
+              '/api/assets/' || id || '/content' AS url
+         FROM assets
+        WHERE ${filters.join(" AND ")}
+        ORDER BY created_at DESC
+        LIMIT 200`,
+      values,
+    ),
+  );
+});
+
+app.post(
+  "/api/uploads",
+  requireAuth,
+  requireOrganization,
+  requireRole("EDITOR"),
+  async (c) => {
+    const form = await c.req.parseBody();
+    const file = form.file;
+    if (!file || typeof file === "string") throw new HTTPError(400, "No file provided");
+    if (file.size > 25 * 1024 * 1024) throw new HTTPError(413, "File exceeds the 25 MB limit");
+    const allowed = new Set([
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+    ]);
+    if (!allowed.has(file.type)) throw new HTTPError(400, "Unsupported image format");
+
+    const organizationId = c.get("organizationId");
+    const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "") || "bin";
+    const key = `${organizationId}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await putObject(key, bytes, file.type);
+    const asset = await one<any>(
+      `INSERT INTO assets(
+         organization_id, uploaded_by, name, category, mime_type, size_bytes, storage_key
+       ) VALUES ($1, $2, $3, 'uploads', $4, $5, $6)
+       RETURNING id`,
+      [organizationId, c.get("user").id, file.name, file.type, file.size, key],
+    );
+    return c.json({ url: `/api/assets/${asset.id}/content`, asset_id: asset.id }, 201);
+  },
+);
+
+app.get("/api/assets/:id/content", requireAuth, requireOrganization, async (c) => {
+  const asset = await one<{ storage_key: string; mime_type: string }>(
+    "SELECT storage_key, mime_type FROM assets WHERE id = $1 AND organization_id = $2",
+    [c.req.param("id"), c.get("organizationId")],
+  );
+  if (!asset) throw new HTTPError(404, "Asset not found");
+  const stored = await getObject(asset.storage_key, asset.mime_type);
+  if (!stored) throw new HTTPError(404, "Asset content not found");
+  return new Response(stored.data, {
+    headers: {
+      "Content-Type": stored.contentType,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Searchable design element library
+// ---------------------------------------------------------------------------
+
+app.get("/api/elements/search", requireAuth, requireOrganization, async (c) => {
+  const search = c.req.query("q") ?? "";
+  const category = c.req.query("category") ?? "all";
+  const builtins = searchBuiltins(search, category);
+  let icons: Awaited<ReturnType<typeof searchIconify>> = [];
+  if ((category === "all" || category === "icons") && search.trim().length >= 2) {
+    try {
+      icons = await searchIconify(search);
+    } catch (error) {
+      console.warn("Iconify search unavailable", error);
+    }
+  }
+  return c.json([...builtins, ...icons]);
+});
+
+app.get(
+  "/api/elements/iconify/:prefix/:name",
+  requireAuth,
+  requireOrganization,
+  async (c) => {
+    const svg = await fetchIconifySvg(c.req.param("prefix"), c.req.param("name"));
+    if (!svg) throw new HTTPError(404, "Icon not found");
+    return c.body(svg, 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=86400",
+    });
+  },
+);
+
+// Static production application. API routes above always take precedence.
+app.use("/*", serveStatic({ root: "./dist" }));
+app.get("*", async (c) => {
+  const html = await readFile(resolve(process.cwd(), "dist/index.html"), "utf8");
+  return c.html(html);
 });
 
 export default app;
