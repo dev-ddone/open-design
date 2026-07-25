@@ -24,14 +24,17 @@
     "fabric": "^6.0.0",
     "hono": "^4.12.10",
     "jose": "^6.2.3",
+    "lib0": "^0.2.58",
     "lucide-preact": "^0.575.0",
     "pg": "^8.22.0",
     "preact": "^10.25.0",
     "tailwindcss": "^4.2.2",
     "webfontloader": "^1.6.28",
     "ws": "^8.18.3",
+    "y-protocols": "^1.0.5",
     "y-websocket": "2.1.0",
     "yjs": "^13.6.27",
+    "yjs-server": "0.2.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
