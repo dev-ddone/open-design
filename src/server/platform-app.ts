@@ -4,6 +4,7 @@ import passwordRecovery from "./password-recovery.js";
 import invitationAcceptance from "./invitation-acceptance.js";
 import templateApplication from "./template-application.js";
 import elementsLocalization from "./elements-localization.js";
+import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
 import elementsUniverse from "./elements-universe.js";
 import guards from "./legacy-guards.js";
@@ -39,6 +40,8 @@ app.route("/", invitationAcceptance);
 app.route("/", templateApplication);
 // Italian search terms are expanded with English synonyms before global providers are queried.
 app.route("/", elementsLocalization);
+// Stable asset URLs can be rendered by Fabric/Image using the session cookie alone.
+app.route("/", assetContent);
 // Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
 app.route("/", elementPackContent);
 // Federated open asset search is mounted before the smaller legacy library.
