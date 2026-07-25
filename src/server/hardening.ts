@@ -169,7 +169,7 @@ hardening.post("/api/uploads", requireAuth, requireOrganization, async (c) => {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "") || "uploads";
   const tags = formTags(form.tags);
-  const license = formText(form.license, 160);
+  const license = formText(form.license, 160) ?? "proprietary";
   const author = formText(form.author, 300);
   const source = sourceUrl(form.source_url);
   const attributionRequired = String(form.attribution_required ?? "false").toLowerCase() === "true";
