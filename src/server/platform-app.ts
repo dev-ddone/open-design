@@ -3,6 +3,7 @@ import type { AppVariables } from "./auth.js";
 import passwordRecovery from "./password-recovery.js";
 import invitationAcceptance from "./invitation-acceptance.js";
 import templateApplication from "./template-application.js";
+import elementPackContent from "./element-pack-content.js";
 import elementsUniverse from "./elements-universe.js";
 import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
@@ -35,6 +36,8 @@ app.route("/", passwordRecovery);
 app.route("/", invitationAcceptance);
 // Applying a template to an existing design persists its source and edit policy.
 app.route("/", templateApplication);
+// Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
+app.route("/", elementPackContent);
 // Federated open asset search is mounted before the smaller legacy library.
 app.route("/", elementsUniverse);
 // Exact guards prevent older endpoints from bypassing invitation and client ACL rules.
