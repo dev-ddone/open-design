@@ -7,6 +7,7 @@ import {
   Sparkles,
   Shapes,
   SwatchBook,
+  WandSparkles,
 } from "lucide-preact";
 import { useEditor } from "../context";
 import { api, getActiveClientId, scopedHeaders } from "../api";
@@ -15,27 +16,30 @@ import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
 import { ElementsLibrary } from "./elements-library";
 import { BrandKitPanel } from "./brand-kit-panel";
+import { ToolsPanel } from "./tools-panel";
 
-type Section = "templates" | "elements" | "brand" | "text" | "images" | "background" | "designs";
+type Section = "templates" | "elements" | "tools" | "brand" | "text" | "images" | "background" | "designs";
 
 const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing: boolean }[] = [
   { key: "templates", icon: Sparkles, label: "Templates", editing: true },
-  { key: "elements", icon: Shapes, label: "Elements", editing: true },
+  { key: "elements", icon: Shapes, label: "Elementi", editing: true },
+  { key: "tools", icon: WandSparkles, label: "Strumenti", editing: true },
   { key: "brand", icon: SwatchBook, label: "Brand", editing: true },
-  { key: "text", icon: Type, label: "Text", editing: true },
-  { key: "images", icon: Upload, label: "Uploads", editing: true },
-  { key: "background", icon: Palette, label: "Bg", editing: true },
-  { key: "designs", icon: LayoutGrid, label: "Designs", editing: false },
+  { key: "text", icon: Type, label: "Testo", editing: true },
+  { key: "images", icon: Upload, label: "Upload", editing: true },
+  { key: "background", icon: Palette, label: "Sfondo", editing: true },
+  { key: "designs", icon: LayoutGrid, label: "Design", editing: false },
 ];
 
 const SECTION_TITLES: Record<Section, string> = {
   templates: "Templates",
-  elements: "Elements",
+  elements: "Elementi",
+  tools: "Strumenti",
   brand: "Brand kit",
-  text: "Text",
-  images: "Uploads",
-  background: "Background",
-  designs: "Designs",
+  text: "Testo",
+  images: "Upload",
+  background: "Sfondo",
+  designs: "Design",
 };
 
 const GRADIENT_PRESETS = [
@@ -67,7 +71,7 @@ export function LeftSidebar() {
     readOnly,
   } = useEditor();
   const canEdit = !readOnly;
-  const [activeSection, setActiveSection] = useState<Section | null>(canEdit ? "templates" : "designs");
+  const [activeSection, setActiveSection] = useState<Section | null>(canEdit ? "elements" : "designs");
   const [uploading, setUploading] = useState(false);
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,9 +186,9 @@ export function LeftSidebar() {
 
       <div
         class="bg-white border-r border-zinc-200 overflow-hidden transition-all duration-200 ease-in-out"
-        style={{ width: activeSection ? "280px" : "0px" }}
+        style={{ width: activeSection ? "300px" : "0px" }}
       >
-        <div class="w-[280px] h-full flex flex-col">
+        <div class="w-[300px] h-full flex flex-col">
           {activeSection && (
             <>
               <div class="px-3 pt-3 pb-2 shrink-0 flex items-center justify-between">
@@ -208,6 +212,7 @@ export function LeftSidebar() {
                 )}
 
                 {activeSection === "elements" && canEdit && <ElementsLibrary />}
+                {activeSection === "tools" && canEdit && <ToolsPanel />}
                 {activeSection === "brand" && canEdit && <BrandKitPanel />}
 
                 {activeSection === "text" && (
