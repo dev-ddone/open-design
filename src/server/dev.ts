@@ -22,13 +22,14 @@ async function main(): Promise<void> {
     },
   );
 
-  installCollaborationServer(server as Server);
+  const closeCollaboration = installCollaborationServer(server as Server);
 
   let closing = false;
   const shutdown = async (signal: string) => {
     if (closing) return;
     closing = true;
     console.info(`Received ${signal}; shutting down`);
+    closeCollaboration();
     server.close(async () => {
       await closeDatabase();
       process.exit(0);
