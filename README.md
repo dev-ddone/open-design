@@ -56,9 +56,9 @@ WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
 ELEMENT_PACK_URLS=
 ```
 
-For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` together. The backend requests a short-lived OAuth2 token, stores it only in process memory, refreshes it before expiration and retries once with a fresh token after a `401`. Concurrent searches share the same in-flight token request. If authentication is temporarily unavailable, the provider falls back to `OPENVERSE_API_TOKEN` when configured, otherwise to anonymous access.
+For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` together. In Coolify, mark `OPENVERSE_CLIENT_SECRET` as a secret. The backend requests a short-lived OAuth2 token, stores it only in process memory, refreshes it before expiration and retries once with a fresh token after a `401`. Concurrent searches share the same in-flight token request. If authentication is temporarily unavailable, the provider falls back to `OPENVERSE_API_TOKEN` when configured, otherwise to anonymous access.
 
-`OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
+`OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. No scheduled task, cron job or persistent token storage is required. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
 
 ## Creative tools
 
