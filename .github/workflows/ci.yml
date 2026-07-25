@@ -72,7 +72,7 @@ jobs:
           set -o pipefail
           pnpm build 2>&1 | tee frontend-build.log
 
-      - name: Runtime API smoke test
+      - name: Runtime API and realtime smoke test
         id: runtime-smoke
         shell: bash
         run: |
@@ -125,6 +125,8 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3006/ > home.html
           grep -q '<div id="app"></div>' home.html
 
+          node scripts/realtime-smoke.mjs cookies.txt design.json | tee realtime-smoke.log
+
       - name: Build production image
         id: docker-build
         shell: bash
@@ -141,6 +143,7 @@ jobs:
             typecheck.log
             frontend-build.log
             runtime.log
+            realtime-smoke.log
             health.json
             login.json
             client.json
