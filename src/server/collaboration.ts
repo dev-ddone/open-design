@@ -1,5 +1,5 @@
 import type { Server } from "node:http";
-import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import * as Y from "yjs";
 import { setPersistence, setupWSConnection } from "y-websocket/bin/utils.js";
@@ -49,7 +49,7 @@ setPersistence({
   },
 });
 
-function rejectUpgrade(socket: Socket, status: number, message: string): void {
+function rejectUpgrade(socket: Duplex, status: number, message: string): void {
   socket.write(
     `HTTP/1.1 ${status} ${message}\r\nConnection: close\r\nContent-Type: text/plain\r\n\r\n${message}`,
   );
