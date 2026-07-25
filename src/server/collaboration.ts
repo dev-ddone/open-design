@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import type { Socket } from "node:net";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import * as Y from "yjs";
 import { setPersistence, setupWSConnection } from "y-websocket/bin/utils.js";
 import { canAccessDesign, tokenFromCookieHeader, verifySessionToken } from "./auth.js";
@@ -85,7 +85,7 @@ export function installCollaborationServer(server: Server): void {
 
   const heartbeat = setInterval(() => {
     for (const client of wss.clients) {
-      if (client.readyState === client.OPEN) client.ping();
+      if (client.readyState === WebSocket.OPEN) client.ping();
     }
   }, 30_000);
   wss.on("close", () => clearInterval(heartbeat));
