@@ -13,6 +13,33 @@ permissions:
 jobs:
   application:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: open_design
+          POSTGRES_PASSWORD: open_design
+          POSTGRES_DB: open_design
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U open_design -d open_design"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      PORT: 3006
+      APP_URL: http://127.0.0.1:3006
+      DATABASE_URL: postgresql://open_design:open_design@127.0.0.1:5432/open_design
+      JWT_SECRET: ci-only-jwt-secret-with-more-than-thirty-two-characters
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_PATH: ./data/ci-uploads
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      BOOTSTRAP_ADMIN_PASSWORD: ci-admin-password
+      BOOTSTRAP_ADMIN_NAME: CI Administrator
+      BOOTSTRAP_ORGANIZATION_NAME: CI Workspace
+      REGISTRATION_ENABLED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +72,59 @@ jobs:
           set -o pipefail
           pnpm build 2>&1 | tee frontend-build.log
 
+      - name: Runtime API smoke test
+        id: runtime-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm start > runtime.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3006/health > health.json; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat runtime.log
+              exit 1
+            fi
+            sleep 1
+          done
+          jq -e '.status == "ok"' health.json
+
+          curl --fail --silent --show-error \
+            --cookie-jar cookies.txt \
+            --header 'Content-Type: application/json' \
+            --data '{"email":"admin@example.com","password":"ci-admin-password"}' \
+            http://127.0.0.1:3006/api/auth/login > login.json
+          ORGANIZATION_ID=$(jq -er '.organizations[0].id' login.json)
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header 'Content-Type: application/json' \
+            --data '{"name":"Smoke Test Client"}' \
+            http://127.0.0.1:3006/api/clients > client.json
+          CLIENT_ID=$(jq -er '.id' client.json)
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"name\":\"Smoke Test Design\",\"client_id\":\"${CLIENT_ID}\"}" \
+            http://127.0.0.1:3006/api/designs > design.json
+          jq -e '.name == "Smoke Test Design"' design.json
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            'http://127.0.0.1:3006/api/elements/search?category=ornaments&q=floral' > elements.json
+          jq -e 'length > 0' elements.json
+
+          curl --fail --silent --show-error http://127.0.0.1:3006/ > home.html
+          grep -q '<div id="app"></div>' home.html
+
       - name: Build production image
         id: docker-build
         shell: bash
@@ -60,6 +140,12 @@ jobs:
           path: |
             typecheck.log
             frontend-build.log
+            runtime.log
+            health.json
+            login.json
+            client.json
+            design.json
+            elements.json
             docker-build.log
           if-no-files-found: ignore
           retention-days: 3
