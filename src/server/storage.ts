@@ -32,6 +32,10 @@ function s3Client(): S3Client {
   return s3;
 }
 
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
 export async function initializeStorage(): Promise<void> {
   if (config.storage.driver === "local") {
     await mkdir(localRoot, { recursive: true });
@@ -39,11 +43,25 @@ export async function initializeStorage(): Promise<void> {
   }
 
   const client = s3Client();
-  try {
-    await client.send(new HeadBucketCommand({ Bucket: config.storage.s3.bucket }));
-  } catch {
-    await client.send(new CreateBucketCommand({ Bucket: config.storage.s3.bucket }));
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    try {
+      await client.send(new HeadBucketCommand({ Bucket: config.storage.s3.bucket }));
+      return;
+    } catch (headError) {
+      lastError = headError;
+      try {
+        await client.send(new CreateBucketCommand({ Bucket: config.storage.s3.bucket }));
+        return;
+      } catch (createError) {
+        lastError = createError;
+      }
+    }
+    if (attempt < 20) await delay(Math.min(attempt * 500, 3_000));
   }
+  throw new Error("Unable to initialize object storage after 20 attempts", {
+    cause: lastError,
+  });
 }
 
 function safeLocalPath(key: string): string {
@@ -56,11 +74,41 @@ function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   return Uint8Array.from(data).buffer;
 }
 
+function validateSvg(data: Uint8Array): void {
+  let source: string;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    throw new Error("SVG must be valid UTF-8");
+  }
+  if (!/<svg(?:\s|>)/i.test(source)) throw new Error("Invalid SVG document");
+
+  const forbidden = [
+    /<\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|object|embed|audio|video|link|meta)\b/i,
+    /\bon[a-z0-9_-]+\s*=/i,
+    /\b(?:href|xlink:href)\s*=\s*["']\s*(?!#)/i,
+    /\burl\s*\(\s*["']?\s*(?!#)/i,
+    /\bjavascript\s*:/i,
+    /\bexpression\s*\(/i,
+    /@import\b/i,
+    /<!doctype\b/i,
+    /<\?xml-stylesheet\b/i,
+  ];
+  if (forbidden.some((pattern) => pattern.test(source))) {
+    throw new Error("SVG contains unsupported active or external content");
+  }
+}
+
+function validateObject(data: Uint8Array, contentType: string): void {
+  if (contentType === "image/svg+xml") validateSvg(data);
+}
+
 export async function putObject(
   key: string,
   data: Uint8Array,
   contentType: string,
 ): Promise<void> {
+  validateObject(data, contentType);
   if (config.storage.driver === "local") {
     const path = safeLocalPath(key);
     await mkdir(dirname(path), { recursive: true });
