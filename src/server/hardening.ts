@@ -9,7 +9,7 @@ import {
   requireOrganization,
   roleAtLeast,
 } from "./auth.js";
-import { one, pool, query } from "./db.js";
+import { one, pool } from "./db.js";
 import { putObject } from "./storage.js";
 import { validateSvgBytes } from "./svg-security.js";
 
@@ -33,6 +33,42 @@ function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48) || "client";
+}
+
+function formText(value: unknown, maximum: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text ? text.slice(0, maximum) : null;
+}
+
+function sourceUrl(value: unknown): string | null {
+  const text = formText(value, 2_000);
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function formTags(value: unknown): string[] {
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((tag) => typeof tag === "string")
+      .map((tag) => tag.trim().slice(0, 80))
+      .filter(Boolean)
+      .slice(0, 40);
+  } catch {
+    return value
+      .split(",")
+      .map((tag) => tag.trim().slice(0, 80))
+      .filter(Boolean)
+      .slice(0, 40);
+  }
 }
 
 hardening.post("/api/clients", requireAuth, requireOrganization, async (c) => {
@@ -78,7 +114,6 @@ hardening.get("/api/templates/:id", requireAuth, requireOrganization, async (c) 
   } else if (template.organization_id) {
     const ids = await getAccessibleClientIds(c.get("user").id, c.get("organizationId"));
     if (ids !== null && !c.get("allClients")) {
-      // Organization-wide templates are visible, but never reveal another client's template.
       template.client_id = null;
     }
   }
@@ -128,19 +163,37 @@ hardening.post("/api/uploads", requireAuth, requireOrganization, async (c) => {
   const extension = extensionByMime[file.type];
   const key = `${c.get("organizationId")}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
   await putObject(key, bytes, file.type);
+
+  const category = (formText(form.category, 60) ?? "uploads")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "uploads";
+  const tags = formTags(form.tags);
+  const license = formText(form.license, 160);
+  const author = formText(form.author, 300);
+  const source = sourceUrl(form.source_url);
+  const attributionRequired = String(form.attribution_required ?? "false").toLowerCase() === "true";
+
   const asset = await one<any>(
     `INSERT INTO assets(
-       organization_id,client_id,uploaded_by,name,category,mime_type,size_bytes,storage_key
-     ) VALUES ($1,$2,$3,$4,'uploads',$5,$6,$7)
-     RETURNING id,client_id,name,mime_type,size_bytes`,
+       organization_id,client_id,uploaded_by,name,category,tags,mime_type,size_bytes,storage_key,
+       license,author,source_url,attribution_required
+     ) VALUES ($1,$2,$3,$4,$5,$6::text[],$7,$8,$9,$10,$11,$12,$13)
+     RETURNING id,client_id,name,category,tags,mime_type,size_bytes,license,author,source_url,attribution_required`,
     [
       c.get("organizationId"),
       clientId ?? null,
       c.get("user").id,
-      file.name,
+      formText(form.display_name, 240) ?? file.name,
+      category,
+      tags,
       file.type,
       file.size,
       key,
+      license,
+      author,
+      source,
+      attributionRequired,
     ],
   );
   return c.json({ ...asset, url: `/api/assets/${asset.id}/content`, asset_id: asset.id }, 201);
