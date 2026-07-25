@@ -8,7 +8,12 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-preact";
-import { api, getActiveClientId, setActiveClientId } from "../api";
+import {
+  api,
+  getActiveClientId,
+  setActiveClientId,
+  setActiveClientRole,
+} from "../api";
 import { useSession } from "../session";
 import { WorkspaceSettings } from "./workspace-settings";
 
@@ -16,6 +21,7 @@ interface Client {
   id: string;
   name: string;
   slug: string;
+  access_role?: "EDITOR" | "VIEWER";
 }
 
 export function WorkspaceBar() {
@@ -30,7 +36,9 @@ export function WorkspaceBar() {
   const [activeClientId, setActiveClientState] = useState(getActiveClientId());
   const [showSettings, setShowSettings] = useState(false);
   const canManage = activeOrganization?.role === "OWNER" || activeOrganization?.role === "ADMIN";
-  const canCreateClient = activeOrganization?.role !== "VIEWER";
+  const currentClient = clients.find((client) => client.id === activeClientId) ?? null;
+  const effectiveRole = currentClient?.access_role ?? activeOrganization?.role ?? "VIEWER";
+  const canCreateClient = canManage || (activeOrganization?.all_clients && activeOrganization.role === "EDITOR");
 
   useEffect(() => {
     if (!activeOrganization) return;
@@ -38,9 +46,13 @@ export function WorkspaceBar() {
       .then((items) => {
         setClients(items);
         const stored = getActiveClientId();
-        if (stored && !items.some((item) => item.id === stored)) {
+        const selected = stored ? items.find((item) => item.id === stored) : null;
+        if (stored && !selected) {
           setActiveClientId(null);
+          setActiveClientRole(null);
           setActiveClientState(null);
+        } else {
+          setActiveClientRole(selected?.access_role ?? null);
         }
       })
       .catch((error) => console.error("Unable to load clients", error));
@@ -48,7 +60,9 @@ export function WorkspaceBar() {
 
   const selectClient = (id: string) => {
     const value = id || null;
+    const client = value ? clients.find((item) => item.id === value) : null;
     setActiveClientId(value);
+    setActiveClientRole(client?.access_role ?? null);
     setActiveClientState(value);
     window.location.assign("/");
   };
@@ -58,8 +72,9 @@ export function WorkspaceBar() {
     if (!name?.trim()) return;
     try {
       const client = await api<Client>("POST", "/api/clients", { name: name.trim() });
-      setClients((current) => [...current, client].sort((a, b) => a.name.localeCompare(b.name)));
+      setClients((current) => [...current, client].sort((first, second) => first.name.localeCompare(second.name)));
       setActiveClientId(client.id);
+      setActiveClientRole(client.access_role ?? null);
       setActiveClientState(client.id);
       window.location.assign("/");
     } catch (error) {
@@ -102,10 +117,10 @@ export function WorkspaceBar() {
             onChange={(event) => selectClient((event.target as HTMLSelectElement).value)}
             aria-label="Client"
           >
-            <option class="text-zinc-900" value="">All clients</option>
+            {(activeOrganization?.all_clients || canManage) && <option class="text-zinc-900" value="">All clients</option>}
             {clients.map((client) => (
               <option class="text-zinc-900" key={client.id} value={client.id}>
-                {client.name}
+                {client.name}{client.access_role ? ` · ${client.access_role}` : ""}
               </option>
             ))}
           </select>
@@ -124,12 +139,12 @@ export function WorkspaceBar() {
 
         <div class="ml-auto flex items-center gap-2 sm:gap-3">
           <span class="hidden sm:inline-flex items-center gap-1.5 rounded-md bg-white/5 border border-white/10 px-2 py-1 text-[10px] font-semibold text-zinc-400">
-            <ShieldCheck size={12} /> {activeOrganization?.role ?? "VIEWER"}
+            <ShieldCheck size={12} /> {effectiveRole}
           </span>
           {canManage && (
             <button
               type="button"
-              title="Workspace members"
+              title="Workspace members and invitations"
               onClick={() => setShowSettings(true)}
               class="w-8 h-8 grid place-items-center rounded-lg bg-transparent border-0 text-zinc-500 cursor-pointer hover:bg-white/10 hover:text-white"
             >
