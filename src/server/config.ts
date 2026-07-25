@@ -10,16 +10,22 @@ function int(value: string | undefined, fallback: number): number {
 
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const jwtSecret = process.env.JWT_SECRET ?? "development-only-change-this-secret-now";
+const emailDelivery = (process.env.EMAIL_DELIVERY ?? (process.env.SMTP_HOST ? "smtp" : "log")) as
+  | "smtp"
+  | "log";
 
 if (nodeEnv === "production" && jwtSecret.length < 32) {
   throw new Error("JWT_SECRET must contain at least 32 characters in production");
+}
+if (nodeEnv === "production" && emailDelivery === "smtp" && !process.env.SMTP_HOST) {
+  throw new Error("SMTP_HOST is required when EMAIL_DELIVERY=smtp");
 }
 
 export const config = {
   nodeEnv,
   isProduction: nodeEnv === "production",
   port: int(process.env.PORT, 3006),
-  appUrl: process.env.APP_URL ?? "http://localhost:3006",
+  appUrl: (process.env.APP_URL ?? "http://localhost:3006").replace(/\/$/, ""),
   databaseUrl:
     process.env.DATABASE_URL ??
     "postgresql://open_design:open_design@localhost:5432/open_design",
@@ -27,6 +33,18 @@ export const config = {
   sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "ddone_design_session",
   sessionTtlDays: int(process.env.SESSION_TTL_DAYS, 14),
   registrationEnabled: bool(process.env.REGISTRATION_ENABLED, true),
+  passwordResetTtlMinutes: int(process.env.PASSWORD_RESET_TTL_MINUTES, 30),
+  invitationTtlHours: int(process.env.INVITATION_TTL_HOURS, 72),
+  email: {
+    delivery: emailDelivery,
+    host: process.env.SMTP_HOST,
+    port: int(process.env.SMTP_PORT, 587),
+    secure: bool(process.env.SMTP_SECURE, false),
+    user: process.env.SMTP_USER,
+    password: process.env.SMTP_PASSWORD,
+    from: process.env.EMAIL_FROM ?? "DDone Design <noreply@ddone.it>",
+    replyTo: process.env.EMAIL_REPLY_TO,
+  },
   storage: {
     driver: (process.env.STORAGE_DRIVER ?? "local") as "local" | "s3",
     localPath: process.env.LOCAL_STORAGE_PATH ?? "./data/uploads",
