@@ -3,8 +3,9 @@
   "version": "2.0.0-alpha.1",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "concurrently -n ui,api -c cyan,green \"vite\" \"tsx watch src/server/dev.ts\"",
