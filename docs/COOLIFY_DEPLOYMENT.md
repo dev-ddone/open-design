@@ -58,13 +58,28 @@ ELEMENTS_MAX_PER_PROVIDER=48
 ICONIFY_API_URL=https://api.iconify.design
 ICONIFY_COLLECTIONS=tabler,ph,heroicons,bi,material-symbols
 OPENVERSE_API_URL=https://api.openverse.org
+OPENVERSE_CLIENT_ID=<Openverse application client_id>
+OPENVERSE_CLIENT_SECRET=<Openverse application client_secret>
 OPENVERSE_API_TOKEN=
 OPENVERSE_LICENSES=cc0,pdm,by,by-sa
 WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
 ELEMENT_PACK_URLS=
 ```
 
-`OPENVERSE_API_TOKEN` is optional. Anonymous access works with lower rate limits. Set a token when usage grows.
+Configure `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` together. Mark `OPENVERSE_CLIENT_SECRET` as secret in Coolify. Never expose it to the frontend, commit it to Git or paste it into logs.
+
+The backend uses the OAuth2 `client_credentials` flow automatically:
+
+1. the first Openverse request obtains a short-lived access token;
+2. the token is kept only in the `app` process memory;
+3. concurrent requests share one in-flight token acquisition;
+4. the token is refreshed before its advertised expiration;
+5. a `401` invalidates the token and retries the original request once with a new token;
+6. if token acquisition temporarily fails, the provider uses `OPENVERSE_API_TOKEN` when configured, otherwise anonymous access.
+
+`OPENVERSE_API_TOKEN` is therefore a legacy/manual fallback and should normally remain empty. No scheduled task, cron job, database table or persistent token volume is required. Each application replica can maintain its own token safely.
+
+Both credentials must be present or both must be empty. Supplying only one causes startup to fail with an explicit configuration error.
 
 Provider requests are made by the `app` container. The server therefore needs outbound HTTPS access to:
 
@@ -125,12 +140,21 @@ STORAGE_DRIVER=s3
 
 At startup the application automatically:
 
-1. connects to PostgreSQL;
-2. applies pending SQL migrations from `migrations/`;
-3. creates the bootstrap owner when the database has no users;
-4. creates the configured MinIO bucket when missing;
-5. verifies SMTP when enabled;
-6. starts HTTP and authenticated WebSocket services.
+1. installs the Openverse authentication lifecycle according to the configured mode;
+2. connects to PostgreSQL;
+3. applies pending SQL migrations from `migrations/`;
+4. creates the bootstrap owner when the database has no users;
+5. creates the configured MinIO bucket when missing;
+6. verifies SMTP when enabled;
+7. starts HTTP and authenticated WebSocket services.
+
+The application log reports only the selected Openverse mode:
+
+```text
+Openverse authentication mode: oauth2-auto
+```
+
+It never logs the client secret or access token.
 
 Health endpoint:
 
@@ -158,9 +182,9 @@ Never remove these Compose volumes during a normal update:
 - `minio_data`;
 - `app_uploads`.
 
-`app_uploads` is a fallback local volume. When `STORAGE_DRIVER=s3`, uploaded files are stored in `minio_data`.
+`app_uploads` is a fallback local volume. When `STORAGE_DRIVER=s3`, uploaded files and selected remote raster assets are stored in `minio_data`.
 
-Remote search previews are cached in memory and do not require an additional persistent volume. Inserting a remote item stores its source/license metadata inside the design; private user uploads continue to use MinIO.
+Remote search previews and Openverse access tokens are cached only in process memory and do not require another persistent volume. Selecting a remote raster item imports it into private storage and stores its source/license metadata in PostgreSQL and the design.
 
 ## Backup
 
@@ -177,7 +201,7 @@ docker compose exec -T postgres pg_dump \
 
 Back up the `minio_data` Docker volume or mirror the bucket with an S3-compatible backup tool.
 
-A complete recovery requires PostgreSQL and object storage because the database contains asset metadata while MinIO contains uploaded image and SVG bytes.
+A complete recovery requires PostgreSQL and object storage because the database contains asset metadata while MinIO contains uploaded and imported image/SVG bytes.
 
 ## Update
 
@@ -186,12 +210,14 @@ A complete recovery requires PostgreSQL and object storage because the database 
 3. Keep existing volumes.
 4. Let the application apply only unrecorded migrations.
 5. Verify `/health`, login, one Elements search, one remote image insertion, one upload, SMTP, password reset and a two-browser realtime session.
+6. With Openverse credentials configured, check the `app` startup log for `Openverse authentication mode: oauth2-auto`.
 
 ## Security and licensing
 
 - Use HTTPS only in production.
 - Keep PostgreSQL and MinIO on the private Compose network.
 - Use independent random values for database, JWT, SMTP and MinIO secrets.
+- Treat `OPENVERSE_CLIENT_SECRET` as a production secret.
 - Set `REGISTRATION_ENABLED=false` when public registration is not required.
 - Do not use `EMAIL_DELIVERY=log` in production.
 - Assign `VIEWER` to clients who should inspect/export but not edit projects.
