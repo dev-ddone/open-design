@@ -8,8 +8,26 @@ import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
 import advanced from "./advanced.js";
 import legacy from "./index.js";
+import { validateSvgBytes } from "./svg-security.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
+
+// Every SVG returned by a remote Elements provider passes the same restrictive
+// validation as a user upload before it reaches Fabric.js in the browser.
+app.use("/api/elements-universe/*", async (c, next) => {
+  await next();
+  const contentType = c.res.headers.get("content-type") ?? "";
+  if (!c.res.ok || !contentType.toLowerCase().includes("image/svg+xml")) return;
+  try {
+    const bytes = new Uint8Array(await c.res.clone().arrayBuffer());
+    validateSvgBytes(bytes);
+  } catch (error) {
+    c.res = c.json(
+      { error: error instanceof Error ? `Unsafe remote SVG: ${error.message}` : "Unsafe remote SVG" },
+      502,
+    );
+  }
+});
 
 // Password-reset requests never disclose whether an account exists.
 app.route("/", passwordRecovery);
