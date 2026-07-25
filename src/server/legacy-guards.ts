@@ -12,6 +12,14 @@ import { one } from "./db.js";
 
 const guards = new Hono<{ Variables: AppVariables }>();
 
+guards.onError((error, c) => {
+  if (error instanceof HTTPException) {
+    return c.json({ error: error.message }, error.status);
+  }
+  console.error(error);
+  return c.json({ error: "Internal server error" }, 500);
+});
+
 async function parseBody<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.infer<T>> {
   const parsed = schema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -22,10 +30,11 @@ async function parseBody<T extends z.ZodTypeAny>(c: any, schema: T): Promise<z.i
   return parsed.data;
 }
 
-guards.post("/api/organization/members", requireAuth, requireOrganization, async () => {
-  throw new HTTPException(410, {
-    message: "Direct member addition has been replaced by secure email invitations",
-  });
+guards.post("/api/organization/members", requireAuth, requireOrganization, async (c) => {
+  return c.json(
+    { error: "Direct member addition has been replaced by secure email invitations" },
+    410,
+  );
 });
 
 guards.get("/api/clients/:id", requireAuth, requireOrganization, async (c) => {
