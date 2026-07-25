@@ -1,5 +1,8 @@
 const ORGANIZATION_STORAGE_KEY = "ddone_design_organization_id";
 const CLIENT_STORAGE_KEY = "ddone_design_client_id";
+const CLIENT_ROLE_STORAGE_KEY = "ddone_design_client_role";
+
+export type EffectiveClientRole = "EDITOR" | "VIEWER" | null;
 
 export function getActiveOrganizationId(): string | null {
   return localStorage.getItem(ORGANIZATION_STORAGE_KEY);
@@ -18,7 +21,19 @@ export function getActiveClientId(): string | null {
 export function setActiveClientId(id: string | null): void {
   if (id) localStorage.setItem(CLIENT_STORAGE_KEY, id);
   else localStorage.removeItem(CLIENT_STORAGE_KEY);
+  if (!id) localStorage.removeItem(CLIENT_ROLE_STORAGE_KEY);
   window.dispatchEvent(new CustomEvent("ddone:client-changed", { detail: id }));
+}
+
+export function getActiveClientRole(): EffectiveClientRole {
+  const value = localStorage.getItem(CLIENT_ROLE_STORAGE_KEY);
+  return value === "EDITOR" || value === "VIEWER" ? value : null;
+}
+
+export function setActiveClientRole(role: EffectiveClientRole): void {
+  if (role) localStorage.setItem(CLIENT_ROLE_STORAGE_KEY, role);
+  else localStorage.removeItem(CLIENT_ROLE_STORAGE_KEY);
+  window.dispatchEvent(new CustomEvent("ddone:client-role-changed", { detail: role }));
 }
 
 export function scopedHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -32,17 +47,17 @@ export function scopedHeaders(extra: Record<string, string> = {}): Record<string
 
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers = scopedHeaders();
-  const opts: RequestInit = {
+  const options: RequestInit = {
     method,
     headers,
     credentials: "include",
   };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
+    options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(path, opts);
+  const response = await fetch(path, options);
   const contentType = response.headers.get("content-type") ?? "";
   const data = contentType.includes("application/json")
     ? await response.json()
