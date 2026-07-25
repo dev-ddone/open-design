@@ -499,24 +499,46 @@ export function ElementsLibrary() {
     }
   }, [insertVector, insertImage, insertMediaCard, rememberRecent]);
 
-  const previewAudio = useCallback((element: DesignElement) => {
-    if (!element.assetUrl) return;
-    if (playingId === element.id && audio) {
-      audio.pause();
+  const previewAudio = useCallback(async (element: DesignElement) => {
+  if (!element.assetUrl) return;
+  if (playingId === element.id && audio) {
+    audio.pause();
+    if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+    setPlayingId(null);
+    setAudio(null);
+    return;
+  }
+  if (audio) {
+    audio.pause();
+    if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+  }
+  try {
+    const response = await fetchProtected(element.assetUrl);
+    const blob = await response.blob();
+    if (!blob.type.startsWith("audio/")) throw new Error("La sorgente non ha restituito audio");
+    const objectUrl = URL.createObjectURL(blob);
+    const next = new Audio(objectUrl);
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    next.onended = () => {
+      cleanup();
       setPlayingId(null);
-      return;
-    }
-    audio?.pause();
-    const next = new Audio(element.assetUrl);
-    next.onended = () => setPlayingId(null);
+      setAudio(null);
+    };
     next.onerror = () => {
+      cleanup();
       setPlayingId(null);
+      setAudio(null);
       setError("Anteprima audio non disponibile");
     };
     setAudio(next);
     setPlayingId(element.id);
-    void next.play();
-  }, [audio, playingId]);
+    await next.play();
+  } catch (caught) {
+    setPlayingId(null);
+    setAudio(null);
+    setError(caught instanceof Error ? caught.message : "Anteprima audio non disponibile");
+  }
+}, [audio, playingId]);
 
   const selectCategory = (next: ElementCategory) => {
     setCategory(next);
@@ -541,7 +563,7 @@ export function ElementsLibrary() {
           onInsert={() => void insertElement(element)}
           onFavorite={() => toggleFavorite(element.id)}
           onBackground={() => void insertImage(element, true)}
-          onPreviewAudio={() => previewAudio(element)}
+          onPreviewAudio={() => void previewAudio(element)}
           playing={playingId === element.id}
         />
       ))}
