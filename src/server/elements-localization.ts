@@ -47,11 +47,10 @@ function expandItalianQuery(input: string): string {
   let result = input;
   let changed = false;
   for (const [pattern, replacement] of ITALIAN_TERMS) {
-    const next = result.replace(pattern, (match) => {
+    result = result.replace(pattern, () => {
       changed = true;
-      return `${match} ${replacement}`;
+      return replacement;
     });
-    result = next;
   }
   return changed
     ? [...new Set(result.trim().split(/\s+/).filter(Boolean))].join(" ").slice(0, 200)
