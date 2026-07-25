@@ -167,7 +167,7 @@ function configured(provider: UniverseProvider): boolean {
   if (!enabled(provider)) return false;
   if (provider === "pexels") return Boolean(config.elements.pexelsApiKey);
   if (provider === "pixabay") return Boolean(config.elements.pixabayApiKey);
-  if (provider === "giphy") return Boolean(config.elements.giphyApiKey);
+  if (provider === "giphy") return false; // Official GIPHY search must remain client-side.
   if (provider === "freesound") return Boolean(config.elements.freesoundToken);
   if (provider === "jamendo") return Boolean(config.elements.jamendoClientId);
   return true;
