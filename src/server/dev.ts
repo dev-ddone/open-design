@@ -1,3 +1,4 @@
+import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
 import app from "./index.js";
 import { installCollaborationServer } from "./collaboration.js";
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
     },
   );
 
-  installCollaborationServer(server);
+  installCollaborationServer(server as Server);
 
   let closing = false;
   const shutdown = async (signal: string) => {
