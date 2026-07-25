@@ -1,18 +1,56 @@
-import { EditorContext } from "./context";
-import { useCanvasState } from "./hooks/use-canvas";
-import { useDesigns } from "./hooks/use-designs";
-import { useRouter } from "./hooks/use-router";
-import { Editor } from "./components/editor";
-import { Home } from "./components/home";
 import WebFont from "webfontloader";
 import { useEffect } from "preact/hooks";
+import { EditorContext } from "./context";
+import { useCanvasState } from "./hooks/use-canvas";
+import { useCollaboration } from "./hooks/use-collaboration";
+import { useDesigns } from "./hooks/use-designs";
+import { useRouter } from "./hooks/use-router";
+import { AuthScreen } from "./components/auth-screen";
+import { Editor } from "./components/editor";
+import { Home } from "./components/home";
+import { WorkspaceBar } from "./components/workspace-bar";
+import { SessionProvider, useSession } from "./session";
 
 export function App() {
-  const { path, navigate, designId } = useRouter();
+  return (
+    <SessionProvider>
+      <SessionGate />
+    </SessionProvider>
+  );
+}
+
+function SessionGate() {
+  const { loading, user, activeOrganization } = useSession();
+
+  if (loading) {
+    return (
+      <div class="h-screen grid place-items-center bg-[#f3f4f7]">
+        <div class="text-center">
+          <div class="spinner !w-7 !h-7 !border-accent/20 !border-t-accent mx-auto mb-3" />
+          <p class="text-xs text-zinc-400">Loading workspace…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !activeOrganization) return <AuthScreen />;
+  return <AuthenticatedApplication />;
+}
+
+function AuthenticatedApplication() {
+  const { user, activeOrganization } = useSession();
+  const { navigate, designId } = useRouter();
   const canvasState = useCanvasState();
   const designState = useDesigns(canvasState.getCanvasJSONForPage);
+  const readOnly = activeOrganization?.role === "VIEWER";
+  const collaboration = useCollaboration({
+    designId: designId ?? null,
+    pages: designState.pages,
+    canvasMap: canvasState.canvasMap,
+    user,
+    readOnly,
+  });
 
-  // Load Google Fonts
   useEffect(() => {
     WebFont.load({
       google: {
@@ -32,70 +70,69 @@ export function App() {
     });
   }, []);
 
-  // Load design from URL on initial load and when designId changes
   useEffect(() => {
-    if (designId && !designState.loading) {
-      if (designState.activeDesign?.id !== designId) {
-        designState.loadDesign(designId);
-      }
+    if (designId && !designState.loading && designState.activeDesign?.id !== designId) {
+      void designState.loadDesign(designId);
     }
-  }, [designId, designState.loading]);
+  }, [designId, designState.loading, designState.activeDesign?.id]);
 
-  // Sync canvas size to the loaded design's dimensions
   useEffect(() => {
-    if (designState.activeDesign) {
-      const { width, height } = designState.activeDesign;
-      if (width && height && (width !== canvasState.canvasWidth || height !== canvasState.canvasHeight)) {
-        canvasState.setCanvasSize(width, height);
-      }
+    if (!designState.activeDesign) return;
+    const { width, height } = designState.activeDesign;
+    if (
+      width &&
+      height &&
+      (width !== canvasState.canvasWidth || height !== canvasState.canvasHeight)
+    ) {
+      canvasState.setCanvasSize(width, height);
     }
-  }, [designState.activeDesign]);
+  }, [designState.activeDesign, canvasState.canvasWidth, canvasState.canvasHeight]);
 
-  // Auto-activate first page when pages load and canvases are registered
   useEffect(() => {
     if (designState.pages.length > 0 && !canvasState.activeCanvasId) {
       canvasState.setActiveCanvas(designState.pages[0].id);
     }
   }, [designState.pages, canvasState.activeCanvasId]);
 
-  if (designState.loading) {
-    return (
-      <div class="flex items-center justify-center h-full bg-[#F3F4F7]">
-        <div class="text-center">
-          <div class="spinner !w-6 !h-6 !border-accent/30 !border-t-accent mb-3 mx-auto" />
-          <p class="text-zinc-400 text-sm">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Home / gallery view
-  if (!designId) {
-    return (
-      <Home
-        designs={designState.designs}
-        templates={designState.templates}
-        navigate={navigate}
-        createDesign={designState.createDesign}
-        deleteDesign={designState.deleteDesign}
-        renameDesign={designState.renameDesign}
-        createFromTemplate={designState.createFromTemplate}
-      />
-    );
-  }
-
-  // Editor view
   const contextValue = {
     ...canvasState,
     ...designState,
-    // activeCanvasId is the source of truth for which page is active
     activePageId: canvasState.activeCanvasId ?? designState.activePageId,
     navigate,
+    readOnly,
+    collaborationConnected: collaboration.connected,
+    collaborationSynced: collaboration.synced,
+    collaborators: collaboration.collaborators,
   };
 
   return (
-    <EditorContext.Provider value={contextValue}>
-      <Editor />
-    </EditorContext.Provider>
+    <div class="h-screen w-screen flex flex-col overflow-hidden">
+      <WorkspaceBar />
+      <div class="flex-1 min-h-0 overflow-auto">
+        {designState.loading ? (
+          <div class="h-full grid place-items-center bg-[#F3F4F7]">
+            <div class="text-center">
+              <div class="spinner !w-6 !h-6 !border-accent/30 !border-t-accent mb-3 mx-auto" />
+              <p class="text-zinc-400 text-sm">Loading designs…</p>
+            </div>
+          </div>
+        ) : !designId ? (
+          <Home
+            designs={designState.designs}
+            templates={designState.templates}
+            navigate={navigate}
+            createDesign={designState.createDesign}
+            deleteDesign={designState.deleteDesign}
+            renameDesign={designState.renameDesign}
+            createFromTemplate={designState.createFromTemplate}
+            readOnly={readOnly}
+          />
+        ) : (
+          <EditorContext.Provider value={contextValue}>
+            <Editor />
+          </EditorContext.Provider>
+        )}
+      </div>
+    </div>
   );
 }
