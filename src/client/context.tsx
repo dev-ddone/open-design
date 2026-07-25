@@ -2,6 +2,7 @@ import { createContext } from "preact";
 import { useContext } from "preact/hooks";
 import type { Design, Template, Page } from "./types";
 import type * as fabric from "fabric";
+import type { Collaborator } from "./hooks/use-collaboration";
 
 export interface CanvasSize {
   label: string;
@@ -14,27 +15,30 @@ export const CANVAS_SIZES: CanvasSize[] = [
   { label: "LinkedIn Landscape", width: 1200, height: 627 },
   { label: "LinkedIn Portrait", width: 1200, height: 1500 },
   { label: "Instagram Story", width: 1080, height: 1920 },
+  { label: "A4 Portrait", width: 1240, height: 1754 },
+  { label: "A4 Landscape", width: 1754, height: 1240 },
+  { label: "Instagram Portrait", width: 1080, height: 1350 },
+  { label: "Facebook Post", width: 1200, height: 630 },
 ];
 
 export interface EditorContextValue {
-  // Canvas (multi-canvas)
   registerCanvas: (pageId: string, canvas: fabric.Canvas) => void;
   unregisterCanvas: (pageId: string) => void;
   setActiveCanvas: (pageId: string) => void;
   activeCanvasId: string | null;
   canvas: fabric.Canvas | null;
+  canvasMap: { current: Map<string, fabric.Canvas> };
   selectedObject: fabric.FabricObject | null;
   canvasWidth: number;
   canvasHeight: number;
   zoom: number;
-  setZoomRaw: (z: number) => void;
+  setZoomRaw: (zoom: number) => void;
   fitScale: number;
-  setFitScale: (s: number) => void;
+  setFitScale: (scale: number) => void;
 
-  // Canvas actions
   addText: (preset: "heading" | "subheading" | "body") => void;
   addShape: (type: "rect" | "circle" | "line" | "triangle") => void;
-  addImage: (url: string) => void;
+  addImage: (url: string) => Promise<void> | void;
   setBackground: (type: "color" | "gradient" | "image", value: string) => void;
   updateSelectedObject: (props: Record<string, unknown>) => void;
   deleteSelected: () => void;
@@ -51,10 +55,8 @@ export interface EditorContextValue {
   getCanvasJSONForPage: (pageId: string) => string;
   loadTemplate: (template: Template) => void;
 
-  // Router
   navigate: (to: string) => void;
 
-  // Designs
   designs: Design[];
   activeDesign: Design | null;
   createDesign: () => Promise<string | undefined>;
@@ -65,21 +67,22 @@ export interface EditorContextValue {
   renameDesign: (id: string, name: string) => Promise<void>;
   saving: boolean;
 
-  // Pages
   pages: Page[];
   activePageId: string | null;
   activePage: Page | null;
-  addPage: () => Promise<void>;
+  addPage: (afterPageId?: string) => Promise<void>;
   duplicatePage: (pageId: string) => Promise<void>;
   deletePage: (pageId: string) => Promise<void>;
   renamePage: (pageId: string, title: string) => Promise<void>;
   switchToPage: (pageId: string) => void;
 
-  // Templates
   templates: Template[];
-
-  // State
   loading: boolean;
+
+  readOnly: boolean;
+  collaborationConnected: boolean;
+  collaborationSynced: boolean;
+  collaborators: Collaborator[];
 }
 
 export const EditorContext = createContext<EditorContextValue>(null!);
