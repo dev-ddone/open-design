@@ -1,6 +1,6 @@
 {
   "name": "@ddone/open-design",
-  "version": "2.0.0-alpha.1",
+  "version": "2.1.0-alpha.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.5",
@@ -24,8 +24,10 @@
     "fabric": "^6.0.0",
     "hono": "^4.12.10",
     "jose": "^6.2.3",
+    "jspdf": "^3.0.3",
     "lib0": "^0.2.58",
     "lucide-preact": "^0.575.0",
+    "nodemailer": "^7.0.5",
     "pg": "^8.22.0",
     "preact": "^10.25.0",
     "tailwindcss": "^4.2.2",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@preact/preset-vite": "^2.9.0",
     "@types/node": "^22.15.0",
+    "@types/nodemailer": "^7.0.1",
     "@types/pg": "^8.15.5",
     "@types/webfontloader": "^1.6.38",
     "@types/ws": "^8.18.1",
