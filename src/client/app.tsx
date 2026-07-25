@@ -21,7 +21,6 @@ export function App() {
 
 function SessionGate() {
   const { loading, user, activeOrganization } = useSession();
-
   if (loading) {
     return (
       <div class="h-screen grid place-items-center bg-[#f3f4f7]">
@@ -32,7 +31,6 @@ function SessionGate() {
       </div>
     );
   }
-
   if (!user || !activeOrganization) return <AuthScreen />;
   return <AuthenticatedApplication />;
 }
@@ -42,13 +40,17 @@ function AuthenticatedApplication() {
   const { navigate, designId } = useRouter();
   const canvasState = useCanvasState();
   const designState = useDesigns(canvasState.getCanvasJSONForPage);
-  const readOnly = activeOrganization?.role === "VIEWER";
+  const readOnly = designState.activeDesign?.effective_role
+    ? designState.activeDesign.effective_role === "VIEWER"
+    : activeOrganization?.role === "VIEWER";
+
   const collaboration = useCollaboration({
     designId: designId ?? null,
     pages: designState.pages,
     canvasMap: canvasState.canvasMap,
     user,
     readOnly,
+    templateEditRules: designState.activeDesign?.template_edit_rules,
   });
 
   useEffect(() => {
@@ -79,14 +81,17 @@ function AuthenticatedApplication() {
   useEffect(() => {
     if (!designState.activeDesign) return;
     const { width, height } = designState.activeDesign;
-    if (
-      width &&
-      height &&
-      (width !== canvasState.canvasWidth || height !== canvasState.canvasHeight)
-    ) {
+    if (width && height && (width !== canvasState.canvasWidth || height !== canvasState.canvasHeight)) {
       canvasState.setCanvasSize(width, height);
     }
-  }, [designState.activeDesign, canvasState.canvasWidth, canvasState.canvasHeight]);
+    canvasState.setTemplateEditRules(designState.activeDesign.template_edit_rules, readOnly);
+  }, [
+    designState.activeDesign?.id,
+    designState.activeDesign?.width,
+    designState.activeDesign?.height,
+    JSON.stringify(designState.activeDesign?.template_edit_rules),
+    readOnly,
+  ]);
 
   useEffect(() => {
     if (designState.pages.length > 0 && !canvasState.activeCanvasId) {
