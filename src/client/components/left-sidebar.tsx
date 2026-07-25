@@ -9,7 +9,8 @@ import {
   SwatchBook,
 } from "lucide-preact";
 import { useEditor } from "../context";
-import { getActiveClientId, scopedHeaders } from "../api";
+import { api, getActiveClientId, scopedHeaders } from "../api";
+import type { Design, Page, Template } from "../types";
 import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
 import { ElementsLibrary } from "./elements-library";
@@ -60,11 +61,15 @@ export function LeftSidebar() {
     setBackground,
     templates,
     loadTemplate,
+    setTemplateEditRules,
+    activeDesign,
+    activePageId,
     readOnly,
   } = useEditor();
   const canEdit = !readOnly;
   const [activeSection, setActiveSection] = useState<Section | null>(canEdit ? "templates" : "designs");
   const [uploading, setUploading] = useState(false);
+  const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +77,35 @@ export function LeftSidebar() {
     if (section.editing && !canEdit) return;
     setActiveSection((previous) => (previous === section.key ? null : section.key));
   };
+
+  const applyTemplate = useCallback(async (template: Template) => {
+    if (!canEdit) return;
+    setApplyingTemplateId(template.id);
+    try {
+      if (activeDesign && activePageId) {
+        const applied = await api<{ design: Design; page: Page }>(
+          "POST",
+          `/api/designs/${activeDesign.id}/apply-template`,
+          { template_id: template.id, page_id: activePageId },
+        );
+        loadTemplate({ ...template, canvas_json: applied.page.canvas_json });
+        setTemplateEditRules(applied.design.template_edit_rules, false);
+      } else {
+        loadTemplate(template);
+        setTemplateEditRules(template.edit_rules, false);
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Unable to apply template");
+    } finally {
+      setApplyingTemplateId(null);
+    }
+  }, [
+    canEdit,
+    activeDesign?.id,
+    activePageId,
+    loadTemplate,
+    setTemplateEditRules,
+  ]);
 
   const uploadFile = useCallback(async (file: File): Promise<{ url?: string }> => {
     const form = new FormData();
@@ -162,14 +196,12 @@ export function LeftSidebar() {
               <div class="flex-1 overflow-y-auto px-3 pb-3">
                 {activeSection === "templates" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-3">Apply a reusable layout</p>
+                    <p class="text-zinc-400 text-[11px] mb-3">Apply a reusable layout. Existing work is versioned first.</p>
                     <div class="grid grid-cols-2 gap-2">
                       {templates.map((template) => (
-                        <TemplateCard
-                          key={template.id}
-                          template={template}
-                          onClick={() => canEdit && loadTemplate(template)}
-                        />
+                        <div key={template.id} class={applyingTemplateId === template.id ? "opacity-50 pointer-events-none" : ""}>
+                          <TemplateCard template={template} onClick={() => void applyTemplate(template)} />
+                        </div>
                       ))}
                     </div>
                   </div>
