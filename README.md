@@ -2,27 +2,83 @@
 
 # DDone Design
 
-A self-hosted, open-source Canva-like design workspace based on Open Design. It combines a Fabric.js visual editor with multi-page designs, organizations, client separation, role-based permissions, private asset storage and realtime Yjs collaboration.
+A self-hosted, open-source Canva-like workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and integrated creative tools.
 
 ## Included
 
-- **Organizations and users** with cookie-based authentication.
-- **Roles:** `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`.
-- **Client separation** inside each organization.
-- **Realtime collaboration** over authenticated WebSockets with persistent Yjs state.
-- **Multi-page Fabric.js editor** with PNG export and reusable templates.
-- **Searchable Elements library:** shapes, icons, ornaments, frames, food, cocktails, backgrounds and social logos.
-- **Iconify provider** limited to configured open-source collections.
-- **PostgreSQL** for users, permissions, designs, clients, assets and realtime documents.
+- **Organizations and users** with secure cookie authentication.
+- **Roles:** `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, including client-specific access.
+- **Realtime object-level collaboration** with presence and remote cursors.
+- **Persistent versions**, restore and safety snapshots.
+- **PNG, JPG, SVG and multi-page PDF export.**
+- **Client brand kits** and selectively editable templates.
+- **PostgreSQL** for accounts, ACLs, designs, versions, templates and collaboration state.
 - **S3/MinIO or local storage** for private uploads.
 - **Docker Compose and Coolify deployment** with health checks and automatic migrations.
+
+## Elements universe
+
+The Elements sidebar performs one federated search across:
+
+- DDone curated vectors;
+- private organization/client uploads;
+- Iconify and its open icon/emoji collections;
+- Openverse openly licensed and public-domain media;
+- Wikimedia Commons;
+- optional administrator-managed HTTPS manifest packs.
+
+Available categories include icons, emoji, illustrations, photos, ornaments, frames, food, cocktails, backgrounds, patterns and social assets. Results support source filters, pagination, favorites, recents and quick searches.
+
+Every inserted remote work keeps these fields inside the Fabric object and saved design:
+
+- provider;
+- source URL;
+- author;
+- license and license URL;
+- attribution text;
+- whether attribution is required.
+
+Provider failures are isolated: a temporary failure of one archive returns a warning while results from healthy providers remain available.
+
+### Provider configuration
+
+```env
+ELEMENTS_PROVIDERS=builtin,uploads,iconify,openverse,wikimedia
+ELEMENTS_CACHE_TTL_SECONDS=900
+ELEMENTS_REQUEST_TIMEOUT_MS=8000
+ELEMENTS_MAX_PER_PROVIDER=48
+OPENVERSE_API_URL=https://api.openverse.org
+OPENVERSE_API_TOKEN=
+OPENVERSE_LICENSES=cc0,pdm,by,by-sa
+WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
+ELEMENT_PACK_URLS=
+```
+
+`OPENVERSE_API_TOKEN` is optional but recommended for higher rate limits. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
+
+## Creative tools
+
+The **Strumenti** sidebar includes:
+
+- object opacity;
+- configurable drop shadows;
+- brightness, contrast, saturation and blur;
+- grayscale and invert;
+- selected-color transparency;
+- circular and rounded image masks;
+- gradient backgrounds;
+- dot, stripe, grid and checker patterns;
+- random blob and wave generators;
+- vector QR code generation.
+
+Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration.
 
 ## Quick start
 
 Requirements:
 
-- Docker with Compose
-- Git
+- Docker with Compose;
+- Git.
 
 ```bash
 git clone https://github.com/dev-ddone/open-design.git
@@ -30,7 +86,7 @@ cd open-design
 cp .env.example .env
 ```
 
-Set at least these values in `.env`:
+Set at least:
 
 ```env
 APP_URL=http://localhost:3006
@@ -46,86 +102,44 @@ Start the stack:
 docker compose up --build -d
 ```
 
-Open:
-
-```text
-http://localhost:3006
-```
-
-Health check:
-
-```text
-http://localhost:3006/health
-```
+Open `http://localhost:3006`; the health endpoint is `http://localhost:3006/health`.
 
 ## Local development
 
-Run PostgreSQL and MinIO:
-
 ```bash
 docker compose up -d postgres minio
-```
-
-Install dependencies and start Vite plus the Node API:
-
-```bash
 corepack enable
 pnpm install --no-frozen-lockfile
 cp .env.example .env
 pnpm dev
 ```
 
-Frontend development URL:
+Frontend development URL: `http://localhost:5178`.
 
-```text
-http://localhost:5178
-```
-
-API and production URL:
-
-```text
-http://localhost:3006
-```
+API and production URL: `http://localhost:3006`.
 
 ## Permission model
 
 | Capability | Owner | Admin | Editor | Viewer |
 |---|---:|---:|---:|---:|
 | Manage workspace members | Yes | Yes | No | No |
-| Create clients | Yes | Yes | Yes | No |
+| Configure client permissions | Yes | Yes | No | No |
+| Create clients | Yes | Yes | Conditional | No |
 | Create and edit designs | Yes | Yes | Yes | No |
 | Upload and reuse assets | Yes | Yes | Yes | No |
 | View and export designs | Yes | Yes | Yes | Yes |
 
-Every design, client, uploaded asset and private template is scoped to an organization. API authorization is applied server-side; hiding controls in the interface is not the security boundary.
-
-## Elements library
-
-The editor sidebar contains:
-
-```text
-Elements
-├── Search
-├── Shapes
-├── Icons
-├── Ornaments
-├── Frames
-├── Food
-├── Cocktails
-├── Backgrounds
-└── Social logos
-```
-
-Built-in SVG elements can be recolored before insertion. Icon searches are proxied through the application and restricted through `ICONIFY_COLLECTIONS`.
+Every design, client, upload, private template and brand kit is scoped to an organization. API authorization is enforced server-side.
 
 ## Production deployment
 
 See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
 
 - Coolify configuration;
-- required secrets;
+- required secrets and provider settings;
 - persistent volumes;
 - WebSocket routing;
+- SMTP configuration;
 - backup and recovery;
 - safe update steps.
 
@@ -135,14 +149,16 @@ See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
 src/client
   Preact UI
   Fabric.js multi-page editor
-  session/workspace controls
-  searchable elements library
-  Yjs collaboration client
+  federated Elements browser
+  integrated creative tools
+  client ACL and brand-kit controls
+  object-level Yjs collaboration
 
 src/server
   Hono API on Node.js
   JWT cookie authentication
-  organization and role authorization
+  organization/client authorization
+  federated provider adapters and secure media proxies
   PostgreSQL persistence
   MinIO/S3 storage
   authenticated Yjs WebSocket server
@@ -151,6 +167,6 @@ migrations
   versioned PostgreSQL schema
 ```
 
-## License
+## Licensing
 
-MIT. The project remains based on the upstream Open Design work. Third-party icon collections and trademarks retain their respective licenses and usage rules.
+DDone Design is MIT and remains based on the upstream Open Design work. Third-party works retain their original licenses. Search results expose provider, author, source and license metadata; users remain responsible for following attribution, share-alike, trademark and other source-specific requirements.
