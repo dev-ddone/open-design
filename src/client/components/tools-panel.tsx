@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useCallback, useMemo, useState } from "preact/hooks";
 import {
   Blend,
@@ -88,7 +89,7 @@ function ToolCard({
 }: {
   title: string;
   icon: typeof Sparkles;
-  children: preact.ComponentChildren;
+  children: ComponentChildren;
 }) {
   return (
     <section class="rounded-xl border border-zinc-200 bg-white p-2.5">
@@ -107,11 +108,11 @@ export function ToolsPanel() {
     selectedObject,
     canvasWidth,
     canvasHeight,
-    updateSelectedObject,
     setBackground,
   } = useEditor();
 
-  const [opacity, setOpacity] = useState(selectedObject?.opacity ?? 1);
+  const liveSelectedObject = canvas?.getActiveObject() ?? selectedObject;
+  const [opacity, setOpacity] = useState(liveSelectedObject?.opacity ?? 1);
   const [shadowColor, setShadowColor] = useState("#000000");
   const [shadowOpacity, setShadowOpacity] = useState(0.28);
   const [shadowBlur, setShadowBlur] = useState(18);
@@ -142,9 +143,23 @@ export function ToolsPanel() {
   const [busy, setBusy] = useState(false);
 
   const selectedImage = useMemo(
-    () => selectedObject instanceof fabric.FabricImage ? selectedObject : null,
-    [selectedObject],
+    () => liveSelectedObject instanceof fabric.FabricImage ? liveSelectedObject : null,
+    [liveSelectedObject],
   );
+
+  const notifyModified = useCallback((target: fabric.FabricObject) => {
+    if (!canvas) return;
+    target.setCoords();
+    canvas.requestRenderAll();
+    canvas.fire("object:modified", { target } as any);
+  }, [canvas]);
+
+  const applySelectedProperties = useCallback((properties: Record<string, unknown>) => {
+    const target = canvas?.getActiveObject() ?? selectedObject;
+    if (!target) return;
+    target.set(properties as any);
+    notifyModified(target);
+  }, [canvas, selectedObject, notifyModified]);
 
   const insertSvg = useCallback(async (svg: string, maximumRatio = 0.45) => {
     if (!canvas) return;
@@ -173,19 +188,19 @@ export function ToolsPanel() {
 
   const applyOpacity = useCallback((value: number) => {
     setOpacity(value);
-    updateSelectedObject({ opacity: value });
-  }, [updateSelectedObject]);
+    applySelectedProperties({ opacity: value });
+  }, [applySelectedProperties]);
 
   const applyShadow = useCallback(() => {
-    if (!selectedObject) return;
+    if (!liveSelectedObject) return;
     const shadow = new fabric.Shadow({
       color: hexToRgba(shadowColor, shadowOpacity),
       blur: shadowBlur,
       offsetX: shadowX,
       offsetY: shadowY,
     });
-    updateSelectedObject({ shadow });
-  }, [selectedObject, shadowColor, shadowOpacity, shadowBlur, shadowX, shadowY, updateSelectedObject]);
+    applySelectedProperties({ shadow });
+  }, [liveSelectedObject, shadowColor, shadowOpacity, shadowBlur, shadowX, shadowY, applySelectedProperties]);
 
   const applyImageFilters = useCallback(() => {
     if (!selectedImage) return;
@@ -202,7 +217,8 @@ export function ToolsPanel() {
     }
     selectedImage.filters = filters;
     selectedImage.applyFilters();
-    updateSelectedObject({ filters, dirty: true });
+    selectedImage.dirty = true;
+    notifyModified(selectedImage);
   }, [
     selectedImage,
     brightness,
@@ -214,7 +230,7 @@ export function ToolsPanel() {
     removeColor,
     transparentColor,
     colorDistance,
-    updateSelectedObject,
+    notifyModified,
   ]);
 
   const resetImageFilters = useCallback(() => {
@@ -228,8 +244,9 @@ export function ToolsPanel() {
     setRemoveColor(false);
     selectedImage.filters = [];
     selectedImage.applyFilters();
-    updateSelectedObject({ filters: [], dirty: true });
-  }, [selectedImage, updateSelectedObject]);
+    selectedImage.dirty = true;
+    notifyModified(selectedImage);
+  }, [selectedImage, notifyModified]);
 
   const applyMask = useCallback((type: "none" | "circle" | "rounded") => {
     if (!selectedImage) return;
@@ -250,8 +267,8 @@ export function ToolsPanel() {
         originY: "center",
       });
     }
-    updateSelectedObject({ clipPath });
-  }, [selectedImage, updateSelectedObject]);
+    applySelectedProperties({ clipPath });
+  }, [selectedImage, applySelectedProperties]);
 
   const gradientSvg = useCallback(() => {
     const radians = (gradientAngle * Math.PI) / 180;
@@ -320,7 +337,7 @@ export function ToolsPanel() {
       </div>
 
       <ToolCard title="Trasparenza" icon={Droplets}>
-        {selectedObject ? (
+        {liveSelectedObject ? (
           <Slider label="Opacità" value={opacity} min={0} max={1} step={0.01} onInput={applyOpacity} />
         ) : (
           <p class="m-0 text-[9px] text-zinc-400">Seleziona un oggetto.</p>
@@ -338,8 +355,8 @@ export function ToolsPanel() {
           <Slider label="Offset Y" value={shadowY} min={-80} max={80} step={1} onInput={setShadowY} />
         </div>
         <div class="grid grid-cols-2 gap-1.5">
-          <button disabled={!selectedObject} onClick={applyShadow} class="h-8 rounded-lg border-0 bg-violet-600 text-white text-[9px] cursor-pointer disabled:opacity-40">Applica</button>
-          <button disabled={!selectedObject} onClick={() => updateSelectedObject({ shadow: undefined })} class="h-8 rounded-lg border border-zinc-200 bg-white text-zinc-600 text-[9px] cursor-pointer disabled:opacity-40">Rimuovi</button>
+          <button disabled={!liveSelectedObject} onClick={applyShadow} class="h-8 rounded-lg border-0 bg-violet-600 text-white text-[9px] cursor-pointer disabled:opacity-40">Applica</button>
+          <button disabled={!liveSelectedObject} onClick={() => applySelectedProperties({ shadow: undefined })} class="h-8 rounded-lg border border-zinc-200 bg-white text-zinc-600 text-[9px] cursor-pointer disabled:opacity-40">Rimuovi</button>
         </div>
       </ToolCard>
 
