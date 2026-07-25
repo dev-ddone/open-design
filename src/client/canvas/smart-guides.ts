@@ -11,6 +11,10 @@ interface GuideState {
   horizontal: number[];
 }
 
+interface ObjectMovingEvent {
+  target?: fabric.FabricObject;
+}
+
 function unique(values: number[]): number[] {
   return [...new Set(values.map((value) => Math.round(value * 100) / 100))];
 }
@@ -75,7 +79,7 @@ export function installSmartGuides(
     canvas.clearContext(canvas.contextTop);
   };
 
-  const moving = (event: fabric.TEvent<MouseEvent>) => {
+  const moving = (event: ObjectMovingEvent) => {
     const target = event.target;
     if (!target || !target.selectable) return;
 
