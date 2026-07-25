@@ -15,9 +15,10 @@ export interface Organization {
   name: string;
   slug: string;
   role: Role;
+  all_clients: boolean;
 }
 
-interface SessionResponse {
+export interface SessionResponse {
   user: SessionUser;
   organizations: Organization[];
 }
@@ -37,6 +38,7 @@ interface SessionContextValue {
   logout(): Promise<void>;
   switchOrganization(id: string): void;
   refresh(): Promise<void>;
+  applyExternalSession(session: SessionResponse): void;
 }
 
 const SessionContext = createContext<SessionContextValue>(null!);
@@ -76,19 +78,13 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     return () => window.removeEventListener("ddone:session-expired", expired);
   }, [refresh, applySession]);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      applySession(await api<SessionResponse>("POST", "/api/auth/login", { email, password }));
-    },
-    [applySession],
-  );
+  const login = useCallback(async (email: string, password: string) => {
+    applySession(await api<SessionResponse>("POST", "/api/auth/login", { email, password }));
+  }, [applySession]);
 
-  const register = useCallback(
-    async (input: { name: string; email: string; password: string; organizationName: string }) => {
-      applySession(await api<SessionResponse>("POST", "/api/auth/register", input));
-    },
-    [applySession],
-  );
+  const register = useCallback(async (input: { name: string; email: string; password: string; organizationName: string }) => {
+    applySession(await api<SessionResponse>("POST", "/api/auth/register", input));
+  }, [applySession]);
 
   const logout = useCallback(async () => {
     try {
@@ -99,10 +95,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     }
   }, [applySession]);
 
-  const activeOrganization = useMemo(
-    () => selectOrganization(organizations),
-    [organizations],
-  );
+  const activeOrganization = useMemo(() => selectOrganization(organizations), [organizations]);
 
   const switchOrganization = useCallback((id: string) => {
     setActiveOrganizationId(id);
@@ -121,6 +114,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         logout,
         switchOrganization,
         refresh,
+        applyExternalSession: applySession,
       }}
     >
       {children}
