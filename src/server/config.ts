@@ -15,17 +15,27 @@ function list(value: string | undefined, fallback = ""): string[] {
     .filter(Boolean);
 }
 
+function optional(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized || undefined;
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const jwtSecret = process.env.JWT_SECRET ?? "development-only-change-this-secret-now";
 const emailDelivery = (process.env.EMAIL_DELIVERY ?? (process.env.SMTP_HOST ? "smtp" : "log")) as
   | "smtp"
   | "log";
+const openverseClientId = optional(process.env.OPENVERSE_CLIENT_ID);
+const openverseClientSecret = optional(process.env.OPENVERSE_CLIENT_SECRET);
 
 if (nodeEnv === "production" && jwtSecret.length < 32) {
   throw new Error("JWT_SECRET must contain at least 32 characters in production");
 }
 if (nodeEnv === "production" && emailDelivery === "smtp" && !process.env.SMTP_HOST) {
   throw new Error("SMTP_HOST is required when EMAIL_DELIVERY=smtp");
+}
+if (Boolean(openverseClientId) !== Boolean(openverseClientSecret)) {
+  throw new Error("OPENVERSE_CLIENT_ID and OPENVERSE_CLIENT_SECRET must be configured together");
 }
 
 export const config = {
@@ -80,7 +90,9 @@ export const config = {
       "builtin,uploads,iconify,openverse,wikimedia",
     ),
     openverseApiUrl: process.env.OPENVERSE_API_URL ?? "https://api.openverse.org",
-    openverseToken: process.env.OPENVERSE_API_TOKEN,
+    openverseClientId,
+    openverseClientSecret,
+    openverseToken: optional(process.env.OPENVERSE_API_TOKEN),
     wikimediaApiUrl:
       process.env.WIKIMEDIA_API_URL ?? "https://commons.wikimedia.org/w/api.php",
     manifestUrls: list(process.env.ELEMENT_PACK_URLS),
