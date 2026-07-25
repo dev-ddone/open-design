@@ -32,10 +32,34 @@ jobs:
         run: pnpm install --no-frozen-lockfile --reporter=append-only
 
       - name: Typecheck
-        run: pnpm typecheck
+        id: typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee typecheck.log
 
       - name: Build frontend
-        run: pnpm build
+        id: frontend-build
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee frontend-build.log
 
       - name: Build production image
-        run: docker build -t ddone-open-design:ci .
+        id: docker-build
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build -t ddone-open-design:ci . 2>&1 | tee docker-build.log
+
+      - name: Upload CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics
+          path: |
+            typecheck.log
+            frontend-build.log
+            docker-build.log
+          if-no-files-found: ignore
+          retention-days: 3
