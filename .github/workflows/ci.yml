@@ -7,6 +7,7 @@ on:
       - main
       - feat/ddone-platform-foundation
       - feat/ddone-advanced-suite
+      - feat/ddone-elements-universe
 
 permissions:
   contents: read
@@ -45,6 +46,7 @@ jobs:
       EMAIL_FROM: DDone CI <noreply@example.com>
       PASSWORD_RESET_TTL_MINUTES: "30"
       INVITATION_TTL_HOURS: "72"
+      ELEMENTS_PROVIDERS: builtin,uploads,iconify,openverse,wikimedia
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -155,6 +157,7 @@ jobs:
           node scripts/realtime-smoke.mjs cookies.txt design.json 2>&1 | tee realtime-smoke.log
           node scripts/advanced-api-smoke.mjs 2>&1 | tee advanced-api-smoke.log
           node scripts/template-application-smoke.mjs 2>&1 | tee template-application-smoke.log
+          node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log
 
       - name: Build production image
         id: docker-build
@@ -176,6 +179,7 @@ jobs:
             realtime-smoke.log
             advanced-api-smoke.log
             template-application-smoke.log
+            elements-universe-smoke.log
             health.json
             login.json
             client.json
