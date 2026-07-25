@@ -4,7 +4,7 @@
 
 The production stack contains:
 
-- `app`: Node.js 22, Hono API, Preact/Fabric.js frontend and authenticated Yjs WebSocket server.
+- `app`: Node.js 22, Hono API, Preact/Fabric.js frontend, federated asset adapters and authenticated Yjs WebSocket server.
 - `postgres`: users, organizations, client ACLs, projects, versions, templates, brand kits and collaboration documents.
 - `minio`: private S3-compatible storage for uploads and reusable assets.
 
@@ -14,10 +14,11 @@ The application listens internally on port `3006`.
 
 1. Add this GitHub repository as a new resource.
 2. Select **Docker Compose** as the build/deployment type.
-3. For staging, select the feature branch. Select `main` only after the pull requests have been merged.
-4. Assign the public application domain to the `app` service and internal port `3006`.
-5. Do not expose PostgreSQL or MinIO publicly unless administration access is explicitly required.
-6. Configure the required variables below and deploy.
+3. Select the branch being tested. For the complete stacked feature set use `feat/ddone-elements-universe` until the pull requests are merged.
+4. Use `/docker-compose.yml` as the Compose location.
+5. Assign the public application domain only to the `app` service and internal port `3006`.
+6. Do not expose PostgreSQL or MinIO publicly.
+7. Configure the variables below and deploy.
 
 ## Required variables
 
@@ -35,15 +36,55 @@ BOOTSTRAP_ADMIN_NAME=Administrator
 BOOTSTRAP_ORGANIZATION_NAME=My Organization
 ```
 
-`APP_URL` must be the exact public HTTPS origin. Password reset and invitation links are generated from this value.
+`APP_URL` must be the exact public HTTPS origin. Password-reset and invitation links are generated from this value.
 
-Recommended production setting after the first account has been created:
+Recommended production setting:
 
 ```env
 REGISTRATION_ENABLED=false
 ```
 
-The bootstrap credentials are used only when the `users` table is empty. Change or remove `BOOTSTRAP_ADMIN_PASSWORD` after the first successful deployment.
+Bootstrap credentials are used only when the `users` table is empty. Replace the bootstrap environment password with another random secret after the initial account exists.
+
+## Federated Elements universe
+
+Recommended Coolify values:
+
+```env
+ELEMENTS_PROVIDERS=builtin,uploads,iconify,openverse,wikimedia
+ELEMENTS_CACHE_TTL_SECONDS=900
+ELEMENTS_REQUEST_TIMEOUT_MS=8000
+ELEMENTS_MAX_PER_PROVIDER=48
+ICONIFY_API_URL=https://api.iconify.design
+ICONIFY_COLLECTIONS=tabler,ph,heroicons,bi,material-symbols
+OPENVERSE_API_URL=https://api.openverse.org
+OPENVERSE_API_TOKEN=
+OPENVERSE_LICENSES=cc0,pdm,by,by-sa
+WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
+ELEMENT_PACK_URLS=
+```
+
+`OPENVERSE_API_TOKEN` is optional. Anonymous access works with lower rate limits. Set a token when usage grows.
+
+Provider requests are made by the `app` container. The server therefore needs outbound HTTPS access to:
+
+- `api.iconify.design`;
+- `api.openverse.org`;
+- `commons.wikimedia.org` and Wikimedia upload hosts;
+- any administrator-configured manifest origin.
+
+A provider failure returns a warning and does not stop the editor. Server cache and timeouts limit repeated upstream calls.
+
+### Optional element packs
+
+`ELEMENT_PACK_URLS` accepts comma-separated HTTPS JSON manifests. Add `manifest` to `ELEMENTS_PROVIDERS` when enabling them:
+
+```env
+ELEMENTS_PROVIDERS=builtin,uploads,iconify,openverse,wikimedia,manifest
+ELEMENT_PACK_URLS=https://assets.example.com/menu-pack.json,https://assets.example.com/ornaments.json
+```
+
+Only configure manifests controlled or reviewed by the administrator. Each manifest must provide license/source metadata for its items.
 
 ## SMTP email
 
@@ -62,23 +103,22 @@ PASSWORD_RESET_TTL_MINUTES=30
 INVITATION_TTL_HOURS=72
 ```
 
-For port `465`, normally use:
+For port `465` normally use:
 
 ```env
 SMTP_PORT=465
 SMTP_SECURE=true
 ```
 
-`EMAIL_DELIVERY=log` is suitable only for local development or isolated staging. It prints one-time invitation and reset URLs to application logs, so it must not be used where untrusted users can read logs.
+`EMAIL_DELIVERY=log` is suitable only for local development or isolated staging because it writes one-time invitation and reset URLs to application logs.
 
-The app verifies the SMTP connection during startup. A failed verification does not stop the design editor, but invitation and password reset requests return an error until SMTP is corrected.
+The app verifies SMTP during startup. A failed verification does not stop the editor, but invitation and password-reset delivery cannot succeed until SMTP is corrected.
 
-## Optional variables
+## Other optional variables
 
 ```env
 SESSION_TTL_DAYS=14
 STORAGE_DRIVER=s3
-ICONIFY_COLLECTIONS=tabler,ph,heroicons,bi,material-symbols
 ```
 
 ## First deployment
@@ -100,9 +140,9 @@ Health endpoint:
 
 ## Reverse proxy and WebSockets
 
-The public domain must route both normal HTTP traffic and WebSocket upgrades to port `3006`. Coolify's standard proxy configuration supports this when the domain is assigned to the `app` service.
+The public domain must route HTTP traffic and WebSocket upgrades to port `3006`. Coolify's standard proxy configuration supports this when the domain is assigned to `app`.
 
-Realtime endpoint pattern:
+Realtime endpoint:
 
 ```text
 /api/collaboration/<design-id>
@@ -114,11 +154,13 @@ Object-level Yjs data and cursor awareness share this authenticated WebSocket co
 
 Never remove these Compose volumes during a normal update:
 
-- `postgres_data`
-- `minio_data`
-- `app_uploads`
+- `postgres_data`;
+- `minio_data`;
+- `app_uploads`.
 
 `app_uploads` is a fallback local volume. When `STORAGE_DRIVER=s3`, uploaded files are stored in `minio_data`.
+
+Remote search previews are cached in memory and do not require an additional persistent volume. Inserting a remote item stores its source/license metadata inside the design; private user uploads continue to use MinIO.
 
 ## Backup
 
@@ -133,19 +175,19 @@ docker compose exec -T postgres pg_dump \
 
 ### MinIO
 
-Back up the `minio_data` Docker volume or mirror the configured bucket with an S3-compatible backup tool.
+Back up the `minio_data` Docker volume or mirror the bucket with an S3-compatible backup tool.
 
-A complete recovery requires both PostgreSQL and object storage because the database contains asset metadata while MinIO contains image and SVG bytes.
+A complete recovery requires PostgreSQL and object storage because the database contains asset metadata while MinIO contains uploaded image and SVG bytes.
 
 ## Update
 
 1. Take PostgreSQL and MinIO backups.
-2. Pull or deploy the new image.
-3. Keep the existing volumes.
-4. The application applies only migrations not recorded in `schema_migrations`.
-5. Verify `/health`, login, SMTP invitation delivery, password reset, one upload and one realtime editing session.
+2. Change the Git branch or deploy the new commit.
+3. Keep existing volumes.
+4. Let the application apply only unrecorded migrations.
+5. Verify `/health`, login, one Elements search, one remote image insertion, one upload, SMTP, password reset and a two-browser realtime session.
 
-## Security notes
+## Security and licensing
 
 - Use HTTPS only in production.
 - Keep PostgreSQL and MinIO on the private Compose network.
@@ -153,5 +195,6 @@ A complete recovery requires both PostgreSQL and object storage because the data
 - Set `REGISTRATION_ENABLED=false` when public registration is not required.
 - Do not use `EMAIL_DELIVERY=log` in production.
 - Assign `VIEWER` to clients who should inspect/export but not edit projects.
-- SVG uploads are rejected when they contain scripts, event handlers, external resources, embedded documents or XML entities.
-- Direct member insertion has been disabled; members must join through expiring one-time invitations.
+- SVG uploads reject scripts, event handlers, external resources, embedded documents and XML entities.
+- Direct member insertion is disabled; members join through expiring invitations.
+- Remote works retain their original licenses. Attribution metadata is saved with inserted objects, but the operator and end user remain responsible for complying with each source license and trademarks.
