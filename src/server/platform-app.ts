@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppVariables } from "./auth.js";
+import passwordRecovery from "./password-recovery.js";
 import invitationAcceptance from "./invitation-acceptance.js";
 import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
@@ -8,6 +9,8 @@ import legacy from "./index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 
+// Password-reset requests never disclose whether an account exists.
+app.route("/", passwordRecovery);
 // Existing members keep their current client permissions when accepting another invitation.
 app.route("/", invitationAcceptance);
 // Exact guards prevent older endpoints from bypassing invitation and client ACL rules.
