@@ -52,7 +52,9 @@ const COLORS = ["#6d5dfc", "#0ea5e9", "#14b8a6", "#f97316", "#ec4899", "#84cc16"
 
 function colorFor(input: string): string {
   let hash = 0;
-  for (let index = 0; index < input.length; index += 1) hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  }
   return COLORS[hash % COLORS.length];
 }
 
@@ -94,7 +96,11 @@ export function useCollaboration({
       { connect: true, maxBackoffTime: 5_000 },
     );
     const localColor = colorFor(user.id);
-    provider.awareness.setLocalStateField("user", { id: user.id, name: user.name, color: localColor });
+    provider.awareness.setLocalStateField("user", {
+      id: user.id,
+      name: user.name,
+      color: localColor,
+    });
 
     const refreshCollaborators = () => {
       const collaborators: Collaborator[] = [];
@@ -113,16 +119,15 @@ export function useCollaboration({
     const onStatus = ({ status }: { status: string }) => {
       setState((current) => ({ ...current, connected: status === "connected" }));
     };
-    const onSync = (synced: boolean) => setState((current) => ({ ...current, synced }));
+    const onSync = (synced: boolean) => {
+      setState((current) => ({ ...current, synced }));
+    };
     provider.on("status", onStatus);
     provider.on("sync", onSync);
     provider.awareness.on("change", refreshCollaborators);
     refreshCollaborators();
 
-    const attached = new Map<string, {
-      canvas: fabric.Canvas;
-      cleanup: () => void;
-    }>();
+    const attached = new Map<string, { canvas: fabric.Canvas; cleanup: () => void }>();
 
     const attachCanvas = (pageId: string, canvas: fabric.Canvas) => {
       if (attached.get(pageId)?.canvas === canvas) return;
@@ -132,8 +137,9 @@ export function useCollaboration({
       const objects = document.getMap<Record<string, unknown>>(`page:${pageId}:objects`);
       const order = document.getArray<string>(`page:${pageId}:order`);
       const meta = document.getMap<unknown>(`page:${pageId}:meta`);
-      let applyingRemote = false;
+      let remoteOperationDepth = 0;
       let cursorFrame = 0;
+      const isApplyingRemote = () => remoteOperationDepth > 0;
 
       const reorder = () => {
         const ids = order.toArray();
@@ -145,7 +151,7 @@ export function useCollaboration({
       };
 
       const applyObject = async (id: string, value: Record<string, unknown> | undefined) => {
-        applyingRemote = true;
+        remoteOperationDepth += 1;
         try {
           const existing = objectById(canvas, id);
           if (!value) {
@@ -155,19 +161,21 @@ export function useCollaboration({
           const replacement = await enlivenObject(value);
           if (!replacement) return;
           (replacement as DDoneFabricObject).ddoneId = id;
-          const index = existing ? canvas.getObjects().indexOf(existing) : Math.max(order.toArray().indexOf(id), 0);
+          const index = existing
+            ? canvas.getObjects().indexOf(existing)
+            : Math.max(order.toArray().indexOf(id), 0);
           if (existing) canvas.remove(existing);
           canvas.insertAt(index, replacement);
           applyEditRules(canvas, templateEditRules, readOnly);
           reorder();
         } finally {
-          applyingRemote = false;
+          remoteOperationDepth -= 1;
         }
       };
 
       const applyAllRemote = async () => {
         if (objects.size === 0) return;
-        applyingRemote = true;
+        remoteOperationDepth += 1;
         try {
           for (const object of [...canvas.getObjects()]) canvas.remove(object);
           for (const id of order.toArray()) {
@@ -183,11 +191,14 @@ export function useCollaboration({
           applyEditRules(canvas, templateEditRules, readOnly);
           canvas.requestRenderAll();
         } finally {
-          applyingRemote = false;
+          remoteOperationDepth -= 1;
         }
       };
 
-      const onObjects = (event: Y.YMapEvent<Record<string, unknown>>, transaction: Y.Transaction) => {
+      const onObjects = (
+        event: Y.YMapEvent<Record<string, unknown>>,
+        transaction: Y.Transaction,
+      ) => {
         if (transaction.origin === LOCAL_ORIGIN) return;
         for (const id of event.keysChanged) void applyObject(id, objects.get(id));
       };
@@ -205,7 +216,7 @@ export function useCollaboration({
       meta.observe(onMeta);
 
       const publishObject = (object: fabric.FabricObject) => {
-        if (readOnly || applyingRemote) return;
+        if (readOnly || isApplyingRemote()) return;
         const id = ensureObjectId(object);
         document.transact(() => {
           objects.set(id, serializeObject(object));
@@ -213,7 +224,7 @@ export function useCollaboration({
         }, LOCAL_ORIGIN);
       };
       const removeObject = (object: fabric.FabricObject) => {
-        if (readOnly || applyingRemote) return;
+        if (readOnly || isApplyingRemote()) return;
         const id = (object as DDoneFabricObject).ddoneId;
         if (!id) return;
         document.transact(() => {
@@ -223,9 +234,12 @@ export function useCollaboration({
         }, LOCAL_ORIGIN);
       };
       const publishMeta = () => {
-        if (readOnly || applyingRemote) return;
+        if (readOnly || isApplyingRemote()) return;
         document.transact(() => {
-          meta.set("backgroundColor", typeof canvas.backgroundColor === "string" ? canvas.backgroundColor : "");
+          meta.set(
+            "backgroundColor",
+            typeof canvas.backgroundColor === "string" ? canvas.backgroundColor : "",
+          );
         }, LOCAL_ORIGIN);
       };
       const publishSelection = () => {
@@ -244,21 +258,38 @@ export function useCollaboration({
           const point = typeof (canvas as any).getScenePoint === "function"
             ? (canvas as any).getScenePoint(event.e)
             : (canvas as any).getPointer(event.e);
-          provider.awareness.setLocalStateField("cursor", { pageId, x: point.x, y: point.y });
+          provider.awareness.setLocalStateField("cursor", {
+            pageId,
+            x: point.x,
+            y: point.y,
+          });
           cursorFrame = 0;
         });
       };
       const clearCursor = () => provider.awareness.setLocalStateField("cursor", null);
+      const onObjectAdded = ({ target }: { target?: fabric.FabricObject }) => {
+        if (target) publishObject(target);
+      };
+      const onObjectModified = ({ target }: { target?: fabric.FabricObject }) => {
+        if (target) publishObject(target);
+      };
+      const onObjectRemoved = ({ target }: { target?: fabric.FabricObject }) => {
+        if (target) removeObject(target);
+      };
+      const onTextChanged = ({ target }: { target?: fabric.FabricObject }) => {
+        if (target) publishObject(target);
+      };
 
-      canvas.on("object:added", ({ target }) => target && publishObject(target));
-      canvas.on("object:modified", ({ target }) => target && publishObject(target));
-      canvas.on("object:removed", ({ target }) => target && removeObject(target));
-      canvas.on("text:changed", ({ target }) => target && publishObject(target));
+      canvas.on("object:added", onObjectAdded);
+      canvas.on("object:modified", onObjectModified);
+      canvas.on("object:removed", onObjectRemoved);
+      canvas.on("text:changed", onTextChanged);
       canvas.on("selection:created", publishSelection);
       canvas.on("selection:updated", publishSelection);
       canvas.on("selection:cleared", clearSelection);
       canvas.on("mouse:move", publishCursor);
       canvas.on("mouse:out", clearCursor);
+      (canvas as any).on("ddone:background:changed", publishMeta);
 
       if (objects.size === 0 && !readOnly) {
         document.transact(() => {
@@ -269,7 +300,10 @@ export function useCollaboration({
             ids.push(id);
           }
           if (ids.length) order.push(ids);
-          meta.set("backgroundColor", typeof canvas.backgroundColor === "string" ? canvas.backgroundColor : "");
+          meta.set(
+            "backgroundColor",
+            typeof canvas.backgroundColor === "string" ? canvas.backgroundColor : "",
+          );
         }, LOCAL_ORIGIN);
       } else {
         void applyAllRemote();
@@ -280,19 +314,19 @@ export function useCollaboration({
         objects.unobserve(onObjects);
         order.unobserve(onOrder);
         meta.unobserve(onMeta);
-        canvas.off("object:added");
-        canvas.off("object:modified");
-        canvas.off("object:removed");
-        canvas.off("text:changed");
+        canvas.off("object:added", onObjectAdded);
+        canvas.off("object:modified", onObjectModified);
+        canvas.off("object:removed", onObjectRemoved);
+        canvas.off("text:changed", onTextChanged);
         canvas.off("selection:created", publishSelection);
         canvas.off("selection:updated", publishSelection);
         canvas.off("selection:cleared", clearSelection);
         canvas.off("mouse:move", publishCursor);
         canvas.off("mouse:out", clearCursor);
+        (canvas as any).off("ddone:background:changed", publishMeta);
         if (cursorFrame) cancelAnimationFrame(cursorFrame);
       };
       attached.set(pageId, { canvas, cleanup });
-      void publishMeta;
     };
 
     const discoverCanvases = () => {
