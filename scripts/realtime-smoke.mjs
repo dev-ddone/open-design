@@ -51,11 +51,11 @@ class AuthenticatedWebSocket extends WebSocket {
   }
 }
 
-function createProvider(doc) {
+function createProvider(document) {
   return new WebsocketProvider(
     "ws://127.0.0.1:3006/api/collaboration",
     design.id,
-    doc,
+    document,
     {
       WebSocketPolyfill: AuthenticatedWebSocket,
       connect: true,
@@ -74,9 +74,45 @@ await Promise.all([
   waitFor(secondProvider, "sync", (synced) => synced === true),
 ]);
 
-const value = JSON.stringify({ version: 1, marker: crypto.randomUUID() });
-first.getMap("page-canvas-json").set("smoke-page", value);
-await waitUntil(() => second.getMap("page-canvas-json").get("smoke-page") === value);
+const pageId = "smoke-page";
+const firstObjects = first.getMap(`page:${pageId}:objects`);
+const secondObjects = second.getMap(`page:${pageId}:objects`);
+const firstOrder = first.getArray(`page:${pageId}:order`);
+const secondOrder = second.getArray(`page:${pageId}:order`);
+const firstMeta = first.getMap(`page:${pageId}:meta`);
+const secondMeta = second.getMap(`page:${pageId}:meta`);
+const objectA = { type: "Rect", ddoneId: "object-a", left: 10, top: 20, width: 100, height: 80 };
+const objectB = { type: "Textbox", ddoneId: "object-b", left: 200, top: 100, text: "Concurrent" };
+
+first.transact(() => {
+  firstObjects.set("object-a", objectA);
+  firstOrder.push(["object-a"]);
+  firstMeta.set("backgroundColor", "#ffffff");
+});
+second.transact(() => {
+  secondObjects.set("object-b", objectB);
+  secondOrder.push(["object-b"]);
+});
+
+await waitUntil(() =>
+  firstObjects.has("object-b")
+  && secondObjects.has("object-a")
+  && firstOrder.toArray().includes("object-b")
+  && secondOrder.toArray().includes("object-a")
+  && secondMeta.get("backgroundColor") === "#ffffff",
+);
+
+firstProvider.awareness.setLocalStateField("user", {
+  id: "first-user",
+  name: "First user",
+  color: "#6d5dfc",
+});
+firstProvider.awareness.setLocalStateField("cursor", { pageId, x: 123, y: 456 });
+await waitUntil(() =>
+  [...secondProvider.awareness.getStates().values()].some(
+    (state) => state.user?.id === "first-user" && state.cursor?.x === 123 && state.cursor?.y === 456,
+  ),
+);
 
 firstProvider.destroy();
 secondProvider.destroy();
@@ -88,8 +124,15 @@ await new Promise((resolve) => setTimeout(resolve, 1_200));
 const reconnected = new Y.Doc();
 const reconnectProvider = createProvider(reconnected);
 await waitFor(reconnectProvider, "sync", (synced) => synced === true);
-await waitUntil(() => reconnected.getMap("page-canvas-json").get("smoke-page") === value);
+const restoredObjects = reconnected.getMap(`page:${pageId}:objects`);
+const restoredOrder = reconnected.getArray(`page:${pageId}:order`);
+await waitUntil(() =>
+  restoredObjects.has("object-a")
+  && restoredObjects.has("object-b")
+  && restoredOrder.toArray().includes("object-a")
+  && restoredOrder.toArray().includes("object-b"),
+);
 
 reconnectProvider.destroy();
 reconnected.destroy();
-console.log("Realtime collaboration synchronized and restored persisted state.");
+console.log("Object-level CRDT state, awareness cursors and persisted reconnect state verified.");
