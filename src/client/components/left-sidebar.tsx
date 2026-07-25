@@ -6,18 +6,21 @@ import {
   LayoutGrid,
   Sparkles,
   Shapes,
+  SwatchBook,
 } from "lucide-preact";
 import { useEditor } from "../context";
-import { useSession } from "../session";
+import { getActiveClientId, scopedHeaders } from "../api";
 import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
 import { ElementsLibrary } from "./elements-library";
+import { BrandKitPanel } from "./brand-kit-panel";
 
-type Section = "templates" | "elements" | "text" | "images" | "background" | "designs";
+type Section = "templates" | "elements" | "brand" | "text" | "images" | "background" | "designs";
 
 const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing: boolean }[] = [
   { key: "templates", icon: Sparkles, label: "Templates", editing: true },
   { key: "elements", icon: Shapes, label: "Elements", editing: true },
+  { key: "brand", icon: SwatchBook, label: "Brand", editing: true },
   { key: "text", icon: Type, label: "Text", editing: true },
   { key: "images", icon: Upload, label: "Uploads", editing: true },
   { key: "background", icon: Palette, label: "Bg", editing: true },
@@ -27,6 +30,7 @@ const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing:
 const SECTION_TITLES: Record<Section, string> = {
   templates: "Templates",
   elements: "Elements",
+  brand: "Brand kit",
   text: "Text",
   images: "Uploads",
   background: "Background",
@@ -50,9 +54,15 @@ const BG_COLORS = [
 ];
 
 export function LeftSidebar() {
-  const { addText, addImage, setBackground, templates, loadTemplate } = useEditor();
-  const { activeOrganization } = useSession();
-  const canEdit = activeOrganization?.role !== "VIEWER";
+  const {
+    addText,
+    addImage,
+    setBackground,
+    templates,
+    loadTemplate,
+    readOnly,
+  } = useEditor();
+  const canEdit = !readOnly;
   const [activeSection, setActiveSection] = useState<Section | null>(canEdit ? "templates" : "designs");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,68 +73,64 @@ export function LeftSidebar() {
     setActiveSection((previous) => (previous === section.key ? null : section.key));
   };
 
+  const uploadFile = useCallback(async (file: File): Promise<{ url?: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const clientId = getActiveClientId();
+    if (clientId) form.append("client_id", clientId);
+    const response = await fetch("/api/uploads", {
+      method: "POST",
+      body: form,
+      credentials: "include",
+      headers: scopedHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Upload failed");
+    return data;
+  }, []);
+
   const handleImageUpload = useCallback(
     async (files: FileList | null) => {
       if (!canEdit || !files?.length) return;
       setUploading(true);
       try {
         for (const file of Array.from(files)) {
-          const form = new FormData();
-          form.append("file", file);
-          const organizationId = localStorage.getItem("ddone_design_organization_id");
-          const response = await fetch("/api/uploads", {
-            method: "POST",
-            body: form,
-            credentials: "include",
-            headers: organizationId ? { "X-Organization-ID": organizationId } : {},
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error ?? "Upload failed");
+          const data = await uploadFile(file);
           if (data.url) await addImage(data.url);
         }
       } catch (error) {
-        console.error("Upload failed:", error);
+        window.alert(error instanceof Error ? error.message : "Upload failed");
       } finally {
         setUploading(false);
       }
     },
-    [addImage, canEdit],
+    [addImage, canEdit, uploadFile],
   );
 
   const handleBackgroundUpload = useCallback(
     async (files: FileList | null) => {
       if (!canEdit || !files?.length) return;
-      const form = new FormData();
-      form.append("file", files[0]);
       try {
-        const organizationId = localStorage.getItem("ddone_design_organization_id");
-        const response = await fetch("/api/uploads", {
-          method: "POST",
-          body: form,
-          credentials: "include",
-          headers: organizationId ? { "X-Organization-ID": organizationId } : {},
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? "Upload failed");
+        const data = await uploadFile(files[0]);
         if (data.url) setBackground("image", data.url);
       } catch (error) {
-        console.error("Background upload failed:", error);
+        window.alert(error instanceof Error ? error.message : "Background upload failed");
       }
     },
-    [setBackground, canEdit],
+    [setBackground, canEdit, uploadFile],
   );
 
   return (
     <aside class="flex flex-row shrink-0">
-      <div class="w-[70px] bg-white border-r border-zinc-200 flex flex-col items-center pt-2 gap-0.5 shrink-0">
+      <div class="w-[70px] bg-white border-r border-zinc-200 flex flex-col items-center pt-2 gap-0.5 shrink-0 overflow-y-auto">
         {SECTIONS.map((section) => {
           const disabled = section.editing && !canEdit;
           return (
             <button
               key={section.key}
               disabled={disabled}
-              title={disabled ? "Viewer role cannot edit" : section.label}
-              class={`flex flex-col items-center justify-center gap-0.5 w-[56px] h-[56px] rounded-lg bg-transparent border-none transition-all ${
+              title={disabled ? "You only have viewer access to this client" : section.label}
+              class={`flex flex-col items-center justify-center gap-0.5 w-[56px] h-[54px] shrink-0 rounded-lg bg-transparent border-none transition-all ${
                 disabled
                   ? "text-zinc-300 cursor-not-allowed"
                   : activeSection === section.key
@@ -133,8 +139,8 @@ export function LeftSidebar() {
               }`}
               onClick={() => handleSectionClick(section)}
             >
-              <section.icon size={20} />
-              <span class="text-[10px] leading-tight">{section.label}</span>
+              <section.icon size={19} />
+              <span class="text-[9px] leading-tight">{section.label}</span>
             </button>
           );
         })}
@@ -170,6 +176,7 @@ export function LeftSidebar() {
                 )}
 
                 {activeSection === "elements" && canEdit && <ElementsLibrary />}
+                {activeSection === "brand" && canEdit && <BrandKitPanel />}
 
                 {activeSection === "text" && (
                   <div class="flex flex-col gap-2">
@@ -181,7 +188,8 @@ export function LeftSidebar() {
                     ].map((item) => (
                       <button
                         key={item.preset}
-                        class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group"
+                        disabled={!canEdit}
+                        class="w-full text-left p-3 rounded-lg bg-white border border-zinc-200 cursor-pointer transition-all hover:border-accent hover:bg-accent/5 group disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => addText(item.preset)}
                       >
                         <span class={`${item.className} text-zinc-900 group-hover:text-accent transition-colors`}>{item.label}</span>
@@ -193,10 +201,10 @@ export function LeftSidebar() {
 
                 {activeSection === "images" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Upload images to your private workspace</p>
+                    <p class="text-zinc-400 text-[11px] mb-2">Upload images to this client’s private library</p>
                     <div
                       class="border-2 border-dashed border-zinc-300 rounded-lg p-6 text-center cursor-pointer transition-all hover:border-accent/50 hover:bg-accent/5"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => canEdit && fileInputRef.current?.click()}
                       onDrop={(event) => {
                         event.preventDefault();
                         void handleImageUpload(event.dataTransfer?.files ?? null);
