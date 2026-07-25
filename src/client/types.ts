@@ -82,15 +82,59 @@ export interface BrandKit {
   updated_at: string;
 }
 
+export type ElementCategory =
+  | "all"
+  | "icons"
+  | "illustrations"
+  | "photos"
+  | "emoji"
+  | "ornaments"
+  | "frames"
+  | "food"
+  | "cocktails"
+  | "backgrounds"
+  | "social"
+  | "patterns";
+
 export interface DesignElement {
   id: string;
   name: string;
-  category: "shapes" | "icons" | "ornaments" | "frames" | "food" | "cocktails" | "backgrounds" | "social";
+  category: ElementCategory;
   tags: string[];
-  provider: "ddone" | "iconify";
+  provider: string;
+  providerLabel: string;
+  kind: "vector" | "image";
   license: string;
+  licenseUrl?: string;
   author?: string;
   sourceUrl?: string;
+  attribution?: string;
+  attributionRequired: boolean;
+  previewUrl?: string;
+  assetUrl?: string;
   svg?: string;
-  svgUrl?: string;
+  width?: number;
+  height?: number;
+  recolorable?: boolean;
+}
+
+export interface ElementProvider {
+  id: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  capabilities: Array<"vector" | "image">;
+  attribution: string;
+}
+
+export interface ElementSearchResponse {
+  items: DesignElement[];
+  page: number;
+  pageSize: number;
+  nextPage: number | null;
+  query: string;
+  effectiveQuery: string;
+  category: ElementCategory;
+  providers: ElementProvider[];
+  warnings: string[];
 }
