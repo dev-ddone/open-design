@@ -58,7 +58,7 @@ export function isObjectEditable(
   if (rules.lockedObjectIds.includes(id) || target.templateLocked) return false;
   if (rules.editableObjectIds.includes(id) || target.templateEditable) return true;
   if (rules.mode === "locked") return false;
-  return rules.editableObjectIds.length === 0;
+  return true;
 }
 
 export function applyEditRules(
