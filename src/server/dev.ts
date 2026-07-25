@@ -5,9 +5,11 @@ import { installCollaborationServer } from "./collaboration.js";
 import { config } from "./config.js";
 import { bootstrapAdmin, closeDatabase, migrate } from "./db.js";
 import { verifyEmailTransport } from "./mailer.js";
+import { installOpenverseAuthenticatedFetch } from "./openverse-auth.js";
 import { initializeStorage } from "./storage.js";
 
 async function main(): Promise<void> {
+  installOpenverseAuthenticatedFetch();
   await migrate();
   await bootstrapAdmin();
   await initializeStorage();
