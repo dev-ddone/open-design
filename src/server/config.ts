@@ -8,6 +8,13 @@ function int(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function list(value: string | undefined, fallback = ""): string[] {
+  return (value ?? fallback)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const jwtSecret = process.env.JWT_SECRET ?? "development-only-change-this-secret-now";
 const emailDelivery = (process.env.EMAIL_DELIVERY ?? (process.env.SMTP_HOST ? "smtp" : "log")) as
@@ -59,10 +66,28 @@ export const config = {
   },
   iconify: {
     apiUrl: process.env.ICONIFY_API_URL ?? "https://api.iconify.design",
-    collections: (process.env.ICONIFY_COLLECTIONS ?? "tabler,ph,heroicons,bi,material-symbols")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
+    collections: list(
+      process.env.ICONIFY_COLLECTIONS,
+      "tabler,ph,heroicons,bi,material-symbols",
+    ),
+  },
+  elements: {
+    cacheTtlSeconds: int(process.env.ELEMENTS_CACHE_TTL_SECONDS, 900),
+    requestTimeoutMs: int(process.env.ELEMENTS_REQUEST_TIMEOUT_MS, 8_000),
+    maxPerProvider: int(process.env.ELEMENTS_MAX_PER_PROVIDER, 48),
+    enabledProviders: list(
+      process.env.ELEMENTS_PROVIDERS,
+      "builtin,uploads,iconify,openverse,wikimedia",
+    ),
+    openverseApiUrl: process.env.OPENVERSE_API_URL ?? "https://api.openverse.org",
+    openverseToken: process.env.OPENVERSE_API_TOKEN,
+    wikimediaApiUrl:
+      process.env.WIKIMEDIA_API_URL ?? "https://commons.wikimedia.org/w/api.php",
+    manifestUrls: list(process.env.ELEMENT_PACK_URLS),
+    allowedOpenverseLicenses: list(
+      process.env.OPENVERSE_LICENSES,
+      "cc0,pdm,by,by-sa",
+    ),
   },
   bootstrap: {
     email: process.env.BOOTSTRAP_ADMIN_EMAIL,
