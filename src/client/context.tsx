@@ -21,6 +21,18 @@ export const CANVAS_SIZES: CanvasSize[] = [
   { label: "Facebook Post", width: 1200, height: 630 },
 ];
 
+export type CropAspect = "free" | "original" | "1:1" | "4:5" | "16:9";
+
+export interface CropState {
+  active: boolean;
+  objectId: string | null;
+  aspect: CropAspect;
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+  rotation: number;
+}
+
 export interface EditorContextValue {
   registerCanvas: (pageId: string, canvas: fabric.Canvas) => void;
   unregisterCanvas: (pageId: string) => void;
@@ -42,6 +54,16 @@ export interface EditorContextValue {
   setBackground: (type: "color" | "gradient" | "image", value: string) => void;
   updateSelectedObject: (props: Record<string, unknown>) => void;
   deleteSelected: () => void;
+  duplicateSelected: () => Promise<void>;
+  arrangeSelected: (direction: "front" | "forward" | "backward" | "back") => void;
+  flipSelected: (axis: "x" | "y") => void;
+  toggleSelectedLock: () => void;
+  recolorSelectedVector: (color: string) => void;
+  beginCrop: (image?: fabric.FabricImage | null) => void;
+  updateCrop: (changes: Partial<Omit<CropState, "active" | "objectId">>) => void;
+  applyCrop: () => void;
+  cancelCrop: () => void;
+  cropState: CropState;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
