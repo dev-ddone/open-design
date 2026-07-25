@@ -53,12 +53,10 @@ export function isObjectEditable(
   const rules = normalizeEditRules(rulesValue);
   const target = object as DDoneFabricObject;
   if (target._isBgImage) return false;
-  const id = ensureObjectId(object);
-  if (target.templateEditable) return true;
-  if (target.templateLocked) return false;
   if (rules.mode === "unlocked") return true;
-  if (rules.lockedObjectIds.includes(id)) return false;
-  if (rules.editableObjectIds.includes(id)) return true;
+  const id = ensureObjectId(object);
+  if (rules.lockedObjectIds.includes(id) || target.templateLocked) return false;
+  if (rules.editableObjectIds.includes(id) || target.templateEditable) return true;
   if (rules.mode === "locked") return false;
   return rules.editableObjectIds.length === 0;
 }
