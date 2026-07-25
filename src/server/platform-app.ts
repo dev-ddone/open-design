@@ -1,11 +1,14 @@
 import { Hono } from "hono";
 import type { AppVariables } from "./auth.js";
+import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
 import advanced from "./advanced.js";
 import legacy from "./index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 
+// Exact guards prevent older endpoints from bypassing invitation and client ACL rules.
+app.route("/", guards);
 // Security-sensitive replacements are mounted before every other route.
 app.route("/", hardening);
 // Advanced routes replace the foundation APIs with multi-client workflows.
