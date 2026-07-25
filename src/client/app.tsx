@@ -1,5 +1,6 @@
 import WebFont from "webfontloader";
 import { useEffect } from "preact/hooks";
+import { getActiveClientId, getActiveClientRole } from "./api";
 import { EditorContext } from "./context";
 import { useCanvasState } from "./hooks/use-canvas";
 import { useCollaboration } from "./hooks/use-collaboration";
@@ -40,9 +41,14 @@ function AuthenticatedApplication() {
   const { navigate, designId } = useRouter();
   const canvasState = useCanvasState();
   const designState = useDesigns(canvasState.getCanvasJSONForPage);
+  const selectedClientId = getActiveClientId();
+  const selectedClientRole = getActiveClientRole();
+  const workspaceReadOnly = activeOrganization?.role === "VIEWER"
+    || selectedClientRole === "VIEWER"
+    || (!activeOrganization?.all_clients && !selectedClientId);
   const readOnly = designState.activeDesign?.effective_role
     ? designState.activeDesign.effective_role === "VIEWER"
-    : activeOrganization?.role === "VIEWER";
+    : workspaceReadOnly;
 
   const collaboration = useCollaboration({
     designId: designId ?? null,
