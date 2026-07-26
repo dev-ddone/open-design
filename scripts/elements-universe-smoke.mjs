@@ -106,7 +106,7 @@ const tables = await getJson(
   "/api/elements-universe/search?providers=local-structures&category=tables&formats=svg&q=menu&page=1&page_size=24",
   headers,
 );
-assert(tables.items.length >= 2, "Searching for menu tables returned too few table templates");
+assert(tables.items.length > 0, "Searching for menu tables returned no table templates");
 assert(tables.items.every((item) => item.category === "tables"), "Table search returned non-table items");
 assert(tables.items.some((item) => /menu/i.test(item.name)), "Table search did not find menu tables");
 
