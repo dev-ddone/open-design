@@ -1,6 +1,5 @@
 import { useEffect } from "preact/hooks";
-import * as fabric from "fabric";
-import { ensureObjectId } from "../canvas-model";
+import { groupActiveSelection, ungroupActiveObject } from "../canvas/grouping";
 import { useEditor } from "../context";
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -50,38 +49,7 @@ export function useEditorShortcuts(): void {
 
       if (modifier && event.key.toLowerCase() === "g") {
         event.preventDefault();
-        if (event.shiftKey) {
-          const active = canvas.getActiveObject();
-          if (!(active instanceof fabric.Group)) return;
-          const objects = active.removeAll();
-          const transform = active.calcTransformMatrix();
-          canvas.remove(active);
-          for (const object of objects) {
-            fabric.util.addTransformToObject(object, transform);
-            ensureObjectId(object);
-            canvas.add(object);
-          }
-          canvas.setActiveObject(new fabric.ActiveSelection(objects, { canvas }));
-          canvas.requestRenderAll();
-          canvas.fire("object:modified", { target: canvas.getActiveObject() } as any);
-          return;
-        }
-        const selected = canvas.getActiveObjects();
-        if (selected.length < 2) return;
-        const selection = canvas.getActiveObject();
-        if (!(selection instanceof fabric.ActiveSelection)) return;
-        const group = new fabric.Group(selected, {
-          left: selection.left,
-          top: selection.top,
-          originX: selection.originX,
-          originY: selection.originY,
-        });
-        selected.forEach((object) => canvas.remove(object));
-        ensureObjectId(group);
-        canvas.add(group);
-        canvas.setActiveObject(group);
-        canvas.requestRenderAll();
-        canvas.fire("object:modified", { target: group } as any);
+        event.shiftKey ? ungroupActiveObject(canvas) : groupActiveSelection(canvas);
         return;
       }
 
