@@ -29,3 +29,7 @@ Image Blend and Dissolve persist their effect parameters on generated results. T
 ## User preferences API
 
 The database migration and authenticated API for per-user favorites, recents and collections are included. The current Elements browser continues to use local storage until the synchronization UI is enabled in a subsequent revision.
+
+## Wikimedia Commons reliability
+
+Server-side Wikimedia requests identify DDone Design with a contactable User-Agent and Api-User-Agent, include MediaWiki maxlag protection and retry short-lived 429, 502, 503, 504, timeout and network failures. The retry wrapper is isolated to Wikimedia hosts and does not alter Openverse or other providers.
