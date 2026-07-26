@@ -87,7 +87,7 @@ export const config = {
     maxPerProvider: int(process.env.ELEMENTS_MAX_PER_PROVIDER, 48),
     enabledProviders: list(
       process.env.ELEMENTS_PROVIDERS,
-      "builtin,uploads,iconify,openverse,wikimedia,pexels,pixabay,giphy,freesound,jamendo,sketchfab",
+      "builtin,uploads,iconify,openverse,wikimedia,pexels,pixabay",
     ),
     openverseApiUrl: process.env.OPENVERSE_API_URL ?? "https://api.openverse.org",
     openverseClientId,
@@ -103,6 +103,8 @@ export const config = {
     pexelsApiKey: optional(process.env.PEXELS_API_KEY),
     pixabayApiUrl: process.env.PIXABAY_API_URL ?? "https://pixabay.com/api/",
     pixabayApiKey: optional(process.env.PIXABAY_API_KEY),
+    // Retained for compatibility with older deployments, but the current editor
+    // deliberately does not expose animations, audio, video or 3D media.
     giphyApiUrl: process.env.GIPHY_API_URL ?? "https://api.giphy.com/v1",
     giphyApiKey: optional(process.env.GIPHY_API_KEY),
     freesoundApiUrl: process.env.FREESOUND_API_URL ?? "https://freesound.org/apiv2",
