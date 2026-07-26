@@ -3,7 +3,7 @@ import { Toolbar } from "./toolbar";
 import { SelectionToolbar } from "./selection-toolbar";
 import { CropPanel } from "./crop-panel";
 import { LeftSidebar } from "./left-sidebar";
-import { RightSidebar } from "./right-sidebar";
+import { RightPanel } from "./right-panel";
 import { PagesBar } from "./pages-bar";
 import { useEditor } from "../context";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
@@ -22,7 +22,7 @@ export function Editor() {
           <CanvasArea />
           <PagesBar />
         </div>
-        {!readOnly && <RightSidebar />}
+        {!readOnly && <RightPanel />}
       </div>
       <CropPanel />
     </div>
