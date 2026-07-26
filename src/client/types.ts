@@ -89,9 +89,6 @@ export type ElementCategory =
   | "graphics"
   | "illustrations"
   | "photos"
-  | "animations"
-  | "videos"
-  | "audio"
   | "emoji"
   | "ornaments"
   | "frames"
@@ -100,15 +97,14 @@ export type ElementCategory =
   | "tables"
   | "modules"
   | "mockups"
-  | "models3d"
   | "food"
   | "cocktails"
   | "backgrounds"
   | "social"
   | "patterns";
 
-export type ElementKind = "vector" | "image" | "gif" | "video" | "audio" | "model";
-export type ElementFormat = "svg" | "png" | "jpg" | "webp" | "gif" | "mp4" | "mp3" | "wav" | "glb" | "gltf" | "other";
+export type ElementKind = "vector" | "image";
+export type ElementFormat = "svg" | "png" | "jpg" | "webp" | "other";
 
 export interface DesignElement {
   id: string;

@@ -633,7 +633,7 @@ catalog.get("/api/elements-universe/search", requireAuth, requireOrganization, a
     items: unique,
     page,
     pageSize,
-    nextPage: unique.length > 0 ? page + 1 : null,
+    nextPage: unique.length >= pageSize ? page + 1 : null,
     query: rawQuery,
     effectiveQuery,
     category,

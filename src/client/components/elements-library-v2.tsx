@@ -28,6 +28,8 @@ import {
 import * as fabric from "fabric";
 import { getActiveClientId, scopedHeaders } from "../api";
 import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";
+import { extractVectorPalette } from "../canvas/media-effects";
+import { smartElementFromSource } from "../canvas/smart-elements";
 import { useEditor } from "../context";
 import type { DesignElement, ElementCategory, ElementProvider, ElementSearchResponse } from "../types";
 
@@ -404,8 +406,24 @@ export function ElementsLibraryV2() {
   }, []);
 
   const insertVector = useCallback(async (element: DesignElement) => {
-    if (!canvas) return;
-    const source = element.svg
+  if (!canvas) return;
+  const smart = element.format === "svg" ? await smartElementFromSource(element.id, color) : null;
+  if (smart) {
+    const scale = Math.min((canvasWidth * 0.58) / (smart.width || 1), (canvasHeight * 0.58) / (smart.height || 1), 1.5);
+    smart.set({
+      left: canvasWidth / 2 - ((smart.width || 0) * scale) / 2,
+      top: canvasHeight / 2 - ((smart.height || 0) * scale) / 2,
+      scaleX: scale,
+      scaleY: scale,
+    });
+    attachSourceMetadata(smart, element);
+    canvas.add(smart);
+    canvas.setActiveObject(smart);
+    canvas.requestRenderAll();
+    window.dispatchEvent(new CustomEvent("ddone:smart-element-created", { detail: { type: smart.ddoneSmartType } }));
+    return;
+  }
+  const source = element.svg
       ?? (element.assetUrl ? await (await fetchProtected(element.assetUrl)).text() : null);
     if (!source) throw new Error("SVG non disponibile");
     const prepared = element.recolorable ? source.replaceAll("currentColor", color) : source;
@@ -423,6 +441,7 @@ export function ElementsLibraryV2() {
       scaleY: scale,
     });
     attachSourceMetadata(object, element);
+    extractVectorPalette(object);
     canvas.add(object);
     canvas.setActiveObject(object);
     canvas.requestRenderAll();

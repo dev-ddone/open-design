@@ -28,6 +28,8 @@ import {
   type DissolveMode,
 } from "../canvas/media-effects";
 import { useEditor } from "../context";
+import { SmartElementPanel } from "./smart-element-panel";
+import { isSmartElement } from "../canvas/smart-elements";
 
 export type ToolId =
   | "home"
@@ -42,7 +44,8 @@ export type ToolId =
   | "pattern"
   | "blob"
   | "wave"
-  | "qr";
+  | "qr"
+  | "smart-element";
 
 interface ToolsPanelProps {
   requestedTool?: string | null;
@@ -68,6 +71,7 @@ const TOOL_CARDS: Array<{
   { id: "blob", title: "Blob", description: "Genera forme organiche modificabili.", icon: WandSparkles, accent: "from-lime-500 to-emerald-500" },
   { id: "wave", title: "Onde", description: "Divisori e sfondi vettoriali ondulati.", icon: Waves, accent: "from-blue-500 to-indigo-500" },
   { id: "qr", title: "QR Code", description: "QR vettoriali con colori personalizzati.", icon: QrCode, accent: "from-zinc-900 to-zinc-600" },
+  { id: "smart-element", title: "Elemento intelligente", description: "Modifica celle, griglie e cornici mantenendo la struttura.", icon: Frame, accent: "from-violet-600 to-indigo-500" },
 ];
 
 function Slider({
@@ -153,6 +157,7 @@ export function ToolsPanel({ requestedTool }: ToolsPanelProps) {
   const target = canvas?.getActiveObject() ?? selectedObject;
   const selectedImage = target instanceof fabric.FabricImage ? target : null;
   const selectedImages = activeImages(canvas);
+  const smartSelected = isSmartElement(target);
 
   useEffect(() => {
     if (requestedTool && TOOL_CARDS.some((tool) => tool.id === requestedTool)) setActiveTool(requestedTool as ToolId);
@@ -188,7 +193,7 @@ export function ToolsPanel({ requestedTool }: ToolsPanelProps) {
         </div>
         <div class="grid grid-cols-2 gap-2">
           {TOOL_CARDS.map((tool) => {
-            const unavailable = tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);
+            const unavailable = tool.id === "smart-element" ? !smartSelected : tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);
             return (
               <button
                 key={tool.id}
@@ -223,6 +228,7 @@ export function ToolsPanel({ requestedTool }: ToolsPanelProps) {
   if (activeTool === "pattern") return <PatternTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;
   if (activeTool === "blob") return <BlobTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;
   if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;
+  if (activeTool === "smart-element") return <SmartElementPanel />;
   return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;
 }
 
