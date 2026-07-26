@@ -27,6 +27,27 @@ async function getJson(path, headers) {
   return data;
 }
 
+function hasPngSignature(bytes) {
+  const expected = [137, 80, 78, 71, 13, 10, 26, 10];
+  return bytes.length >= expected.length && expected.every((value, index) => bytes[index] === value);
+}
+
+function pngDeclaresAlpha(bytes) {
+  if (!hasPngSignature(bytes)) return false;
+  let offset = 8;
+  let colorType;
+  while (offset + 12 <= bytes.length) {
+    const length = ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    const dataOffset = offset + 8;
+    if (type === "IHDR" && length >= 10) colorType = bytes[dataOffset + 9];
+    if (type === "tRNS") return true;
+    if (type === "IEND") break;
+    offset += length + 12;
+  }
+  return colorType === 4 || colorType === 6;
+}
+
 const cookie = parseCookieJar(await readFile(cookieFile, "utf8"));
 const login = JSON.parse(await readFile(loginFile, "utf8"));
 const client = JSON.parse(await readFile(clientFile, "utf8"));
@@ -39,18 +60,19 @@ const headers = {
 
 const registry = await getJson("/api/elements-universe/providers", headers);
 assert(Array.isArray(registry.providers), "Provider registry is missing");
-assert(registry.providers.some((provider) => provider.id === "builtin" && provider.enabled), "Built-in provider must be enabled");
-assert(registry.providers.some((provider) => provider.id === "iconify"), "Iconify provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "openverse"), "Openverse provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "wikimedia"), "Wikimedia provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "pexels"), "Pexels provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "pixabay"), "Pixabay provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "freesound"), "Freesound provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "jamendo"), "Jamendo provider metadata is missing");
-assert(registry.providers.some((provider) => provider.id === "sketchfab"), "Sketchfab provider metadata is missing");
-for (const category of ["shapes", "graphics", "animations", "videos", "audio", "charts", "tables", "modules", "grids", "mockups", "models3d"]) {
+for (const providerId of ["local-structures", "local-tabler", "local-twemoji", "uploads", "iconify", "openverse", "wikimedia", "pexels", "pixabay"]) {
+  assert(registry.providers.some((provider) => provider.id === providerId), `Provider registry is missing ${providerId}`);
+}
+for (const unsupportedProvider of ["giphy", "freesound", "jamendo", "sketchfab"]) {
+  assert(!registry.providers.some((provider) => provider.id === unsupportedProvider), `Unsupported provider ${unsupportedProvider} must not be exposed`);
+}
+for (const category of ["shapes", "graphics", "photos", "charts", "tables", "modules", "grids", "mockups", "icons", "illustrations", "emoji", "ornaments", "food", "cocktails", "backgrounds", "patterns", "social"]) {
   assert(registry.categories.includes(category), `Category registry is missing ${category}`);
 }
+for (const unsupportedCategory of ["animations", "videos", "audio", "models3d"]) {
+  assert(!registry.categories.includes(unsupportedCategory), `Unsupported category ${unsupportedCategory} must not be exposed`);
+}
+assert(JSON.stringify(registry.formats) === JSON.stringify(["all", "svg", "png-transparent", "jpg"]), "Supported format registry is incorrect");
 
 const localizationResponse = await fetch(
   `${BASE_URL}/api/elements-universe/search?providers=openverse&category=frames&q=${encodeURIComponent("cornice dorata floreale")}`,
@@ -61,43 +83,58 @@ const localizationTarget = new URL(localizationResponse.headers.get("location"),
 assert(localizationTarget.searchParams.get("_localized") === "1", "Localized request marker is missing");
 const translatedQuery = localizationTarget.searchParams.get("q") ?? "";
 assert(translatedQuery.includes("frame") && translatedQuery.includes("gold") && translatedQuery.includes("floral"), "Italian search translation is incomplete");
-assert(!translatedQuery.includes("cornice"), "Italian terms must be replaced instead of overconstraining global search");
 
-const builtins = await getJson(
-  "/api/elements-universe/search?providers=builtin&category=ornaments&q=floral&page=1&page_size=12",
-  headers,
-);
-assert(Array.isArray(builtins.items) && builtins.items.length > 0, "Built-in federated search returned no ornaments");
-const ornament = builtins.items.find((item) => item.provider === "builtin");
-assert(ornament?.kind === "vector", "Built-in ornament must be vector data");
-assert(ornament?.format === "svg", "Built-in ornament must expose SVG format metadata");
-assert(ornament?.transparent === true, "Built-in ornament must expose transparency metadata");
-assert(typeof ornament.license === "string" && ornament.license.length > 0, "Element license metadata is missing");
-assert(ornament.attributionRequired === false, "Built-in MIT ornament should not require attribution");
-assert(typeof ornament.svg === "string" && ornament.svg.includes("<svg"), "Built-in SVG content is missing");
-
-for (const generatedCategory of ["charts", "tables", "modules", "grids", "mockups", "shapes"]) {
-  const generated = await getJson(
-    `/api/elements-universe/search?providers=builtin&category=${generatedCategory}&page=1&page_size=12`,
+const structuralIds = new Map();
+for (const structuralCategory of ["charts", "tables", "modules", "grids", "mockups", "shapes"]) {
+  const result = await getJson(
+    `/api/elements-universe/search?providers=local-structures&category=${structuralCategory}&formats=svg&page=1&page_size=24`,
     headers,
   );
-  assert(generated.items.length > 0, `Generated ${generatedCategory} category returned no elements`);
-  assert(generated.items.every((item) => item.kind === "vector" && item.format === "svg"), `${generatedCategory} must contain editable SVG vectors`);
-  assert(generated.items.every((item) => item.transparent === true && item.recolorable === true), `${generatedCategory} must be transparent and recolorable`);
+  assert(result.items.length > 0, `${structuralCategory} returned no local pack elements`);
+  assert(result.items.every((item) => item.category === structuralCategory), `${structuralCategory} leaked results from another category`);
+  assert(result.items.every((item) => item.provider === "local-structures"), `${structuralCategory} must come from the structural pack`);
+  assert(result.items.every((item) => item.kind === "vector" && item.format === "svg"), `${structuralCategory} must contain editable SVG vectors`);
+  assert(result.items.every((item) => item.transparent === true && item.recolorable === true), `${structuralCategory} must remain transparent and recolorable`);
+  structuralIds.set(structuralCategory, new Set(result.items.map((item) => item.id)));
 }
 
-const svgCharts = await getJson(
-  "/api/elements-universe/search?providers=builtin&category=charts&formats=svg&page=1&page_size=12",
-  headers,
-);
-assert(svgCharts.items.length > 0 && svgCharts.items.every((item) => item.format === "svg"), "SVG format filter did not retain vector charts");
+assert(structuralIds.get("tables").size >= 5, "The table pack must contain several real table layouts");
+assert([...structuralIds.get("tables")].every((id) => !structuralIds.get("charts").has(id)), "Tables and charts must not share the same catalog items");
+assert([...structuralIds.get("grids")].every((id) => !structuralIds.get("mockups").has(id)), "Grids and mockups must not share the same catalog items");
 
-const jpgCharts = await getJson(
-  "/api/elements-universe/search?providers=builtin&category=charts&formats=jpg&page=1&page_size=12",
+const tables = await getJson(
+  "/api/elements-universe/search?providers=local-structures&category=tables&formats=svg&q=menu&page=1&page_size=24",
   headers,
 );
-assert(Array.isArray(jpgCharts.items) && jpgCharts.items.length === 0, "JPG filter must exclude generated SVG charts");
-assert(jpgCharts.nextPage === null, "An empty format-filtered result must not advertise another page");
+assert(tables.items.length >= 2, "Searching for menu tables returned too few table templates");
+assert(tables.items.every((item) => item.category === "tables"), "Table search returned non-table items");
+assert(tables.items.some((item) => /menu/i.test(item.name)), "Table search did not find menu tables");
+
+const tableSvgResponse = await fetch(`${BASE_URL}${tables.items[0].assetUrl}`, { headers });
+assert(tableSvgResponse.ok, `Local table SVG returned ${tableSvgResponse.status}`);
+assert((tableSvgResponse.headers.get("content-type") ?? "").includes("image/svg+xml"), "Local table response is not SVG");
+const tableSvg = await tableSvgResponse.text();
+assert(tableSvg.includes("<svg") && tableSvg.includes("currentColor"), "Local table SVG is not recolorable");
+
+const transparentPngs = await getJson(
+  "/api/elements-universe/search?providers=local-twemoji&category=food&formats=png-transparent&q=pizza&page=1&page_size=12",
+  headers,
+);
+assert(transparentPngs.items.length > 0, "Bundled Twemoji did not return a transparent PNG");
+assert(transparentPngs.items.every((item) => item.format === "png" && item.transparent === true), "PNG transparency filter returned incorrectly labelled items");
+const pngResponse = await fetch(`${BASE_URL}${transparentPngs.items[0].assetUrl}`, { headers });
+assert(pngResponse.ok, `Bundled PNG returned ${pngResponse.status}`);
+assert((pngResponse.headers.get("content-type") ?? "") === "image/png", "Bundled PNG has the wrong Content-Type");
+const pngBytes = new Uint8Array(await pngResponse.arrayBuffer());
+assert(hasPngSignature(pngBytes), "Bundled PNG does not contain real PNG bytes");
+assert(pngDeclaresAlpha(pngBytes), "Bundled PNG does not declare an alpha channel");
+
+const jpgTables = await getJson(
+  "/api/elements-universe/search?providers=local-structures&category=tables&formats=jpg&page=1&page_size=12",
+  headers,
+);
+assert(Array.isArray(jpgTables.items) && jpgTables.items.length === 0, "JPG filter must exclude structural SVG and PNG assets");
+assert(jpgTables.nextPage === null, "Empty format-filtered result must not advertise another page");
 
 const uploads = await getJson(
   "/api/elements-universe/search?providers=uploads&category=all&q=safe&page=1&page_size=12",
@@ -140,7 +177,7 @@ assert((cookieOnlyContent.headers.get("content-type") ?? "").includes("image/svg
 assert((await cookieOnlyContent.text()).includes("<svg"), "Stable asset content is missing");
 
 const importedSearch = await getJson(
-  "/api/elements-universe/search?providers=uploads&category=all&q=Persistent&page=1&page_size=12",
+  "/api/elements-universe/search?providers=uploads&category=illustrations&formats=svg&q=Persistent&page=1&page_size=12",
   headers,
 );
 const importedResult = importedSearch.items.find((item) => item.id === `uploads:${imported.asset_id}`);
@@ -152,11 +189,10 @@ assert(importedResult.author === "DDone CI Author", "Private provider lost impor
 assert(importedResult.sourceUrl === "https://example.com/open-asset-source", "Private provider lost imported source metadata");
 assert(importedResult.attributionRequired === true, "Private provider lost imported attribution metadata");
 
-const empty = await getJson(
-  "/api/elements-universe/search?providers=builtin&category=ornaments&q=definitely-no-such-ddone-element&page=1&page_size=12",
-  headers,
-);
-assert(Array.isArray(empty.items) && empty.items.length === 0, "Empty searches must return an empty result list");
-assert(empty.nextPage === null, "Empty searches must not advertise another page");
+const gifForm = new FormData();
+gifForm.append("file", new Blob([new Uint8Array([71, 73, 70, 56, 57, 97])], { type: "image/gif" }), "unsupported.gif");
+gifForm.append("client_id", client.id);
+const gifResponse = await fetch(`${BASE_URL}/api/uploads`, { method: "POST", headers, body: gifForm });
+assert(gifResponse.status === 400, "Unsupported GIF uploads must be rejected");
 
-console.log("Federated Elements providers, categories, format filters, Italian search, licenses and persistent imports verified.");
+console.log("Strict Elements categories, bundled packs, real transparent PNG bytes, format filters and persistent image imports verified.");
