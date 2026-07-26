@@ -23,8 +23,7 @@ function naturalSize(image: fabric.FabricImage): { width: number; height: number
 
 function objectToCanvas(image: fabric.FabricImage, width: number, height: number): HTMLCanvasElement {
   const multiplier = Math.min(2, Math.max(1, 1600 / Math.max(width, height)));
-  const rendered = image.toCanvasElement({ multiplier, withoutTransform: true });
-  return rendered;
+  return image.toCanvasElement({ multiplier, withoutTransform: true });
 }
 
 function canvasDataUrl(canvas: HTMLCanvasElement): string {
@@ -88,6 +87,7 @@ export async function blendImages(
   const metadata = result as DDoneFabricObject;
   metadata.ddoneMediaKind = "blend";
   metadata.ddoneEffect = `blend:${mode}`;
+  metadata.ddoneEffectConfig = JSON.stringify({ mode, secondOpacity });
   ensureObjectId(result);
   return result;
 }
@@ -189,6 +189,7 @@ export async function dissolveImage(
   const metadata = result as DDoneFabricObject;
   metadata.ddoneMediaKind = "image";
   metadata.ddoneEffect = `dissolve:${mode}`;
+  metadata.ddoneEffectConfig = JSON.stringify({ mode, direction, softness });
   ensureObjectId(result);
   return result;
 }
@@ -201,24 +202,72 @@ function canPaint(value: unknown): value is string {
     && !value.startsWith("url(");
 }
 
+function normalizeColor(value: string): string | null {
+  const color = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(color)) return color;
+  if (/^#[0-9a-f]{3}$/.test(color)) {
+    return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+  }
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+  if (!rgb) return null;
+  return `#${[rgb[1], rgb[2], rgb[3]].map((part) => Math.max(0, Math.min(255, Number(part))).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function visitVector(object: fabric.FabricObject, callback: (target: any) => void): void {
+  callback(object as any);
+  const target = object as any;
+  if (typeof target.getObjects === "function") {
+    for (const child of target.getObjects() as fabric.FabricObject[]) visitVector(child, callback);
+  }
+}
+
+export function extractVectorPalette(object: fabric.FabricObject, maximum = 12): string[] {
+  const colors: string[] = [];
+  visitVector(object, (target) => {
+    for (const value of [target.fill, target.stroke]) {
+      if (!canPaint(value)) continue;
+      const normalized = normalizeColor(value);
+      if (normalized && !colors.includes(normalized)) colors.push(normalized);
+      if (colors.length >= maximum) return;
+    }
+  });
+  const metadata = object as DDoneFabricObject;
+  metadata.ddoneVectorPalette = colors;
+  if (!metadata.ddoneVectorOriginalPalette?.length) metadata.ddoneVectorOriginalPalette = [...colors];
+  return colors;
+}
+
+export function replaceVectorColor(object: fabric.FabricObject, from: string, to: string): number {
+  const normalizedFrom = normalizeColor(from);
+  if (!normalizedFrom) return 0;
+  let changed = 0;
+  visitVector(object, (target) => {
+    for (const property of ["fill", "stroke"] as const) {
+      const value = target[property];
+      if (!canPaint(value) || normalizeColor(value) !== normalizedFrom) continue;
+      target.set(property, to);
+      changed += 1;
+    }
+  });
+  object.dirty = true;
+  extractVectorPalette(object);
+  return changed;
+}
+
 export function recolorVectorObject(object: fabric.FabricObject, color: string): number {
   let changed = 0;
-  const visit = (target: fabric.FabricObject) => {
-    const anyTarget = target as any;
-    if (canPaint(anyTarget.fill)) {
-      anyTarget.set("fill", color);
+  visitVector(object, (target) => {
+    if (canPaint(target.fill)) {
+      target.set("fill", color);
       changed += 1;
     }
-    if (canPaint(anyTarget.stroke)) {
-      anyTarget.set("stroke", color);
+    if (canPaint(target.stroke)) {
+      target.set("stroke", color);
       changed += 1;
     }
-    if (typeof anyTarget.getObjects === "function") {
-      for (const child of anyTarget.getObjects() as fabric.FabricObject[]) visit(child);
-    }
-  };
-  visit(object);
+  });
   object.dirty = true;
+  extractVectorPalette(object);
   return changed;
 }
 
