@@ -159,6 +159,9 @@ const STRUCTURAL_ASSETS: StructuralAsset[] = [
 const ITALIAN_ALIASES: Record<string, string> = {
   tabella: "table",
   tabelle: "table",
+  prezzo: "price",
+  prezzi: "prices",
+  listino: "price list",
   griglia: "grid",
   griglie: "grid",
   cornice: "frame",
@@ -255,7 +258,11 @@ function structuralPack(category: CatalogCategory, q: string): LocalPackAsset[] 
   const needle = normalizeQuery(q);
   return STRUCTURAL_ASSETS
     .filter((item) => category === "all" ? true : item.category === category)
-    .filter((item) => !needle || normalizeQuery([item.name, ...item.tags].join(" ")).includes(needle))
+    .filter((item) => {
+      if (!needle) return true;
+      const haystack = normalizeQuery([item.name, ...item.tags].join(" "));
+      return needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
+    })
     .map((item) => ({
       pack: "structures",
       name: item.id,

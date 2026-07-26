@@ -2,45 +2,198 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
+      - feat/ddone-platform-foundation
+      - feat/ddone-advanced-suite
+      - feat/ddone-elements-universe
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-local-pack-search:
-    if: github.head_ref == 'feat/ddone-pro-elements-canvas-ux'
+  application:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: open_design
+          POSTGRES_PASSWORD: open_design
+          POSTGRES_DB: open_design
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U open_design -d open_design"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      PORT: 3006
+      APP_URL: http://127.0.0.1:3006
+      DATABASE_URL: postgresql://open_design:open_design@127.0.0.1:5432/open_design
+      JWT_SECRET: ci-only-jwt-secret-with-more-than-thirty-two-characters
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_PATH: ./data/ci-uploads
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      BOOTSTRAP_ADMIN_PASSWORD: ci-admin-password
+      BOOTSTRAP_ADMIN_NAME: CI Administrator
+      BOOTSTRAP_ORGANIZATION_NAME: CI Workspace
+      REGISTRATION_ENABLED: "true"
+      EMAIL_DELIVERY: log
+      EMAIL_FROM: DDone CI <noreply@example.com>
+      PASSWORD_RESET_TTL_MINUTES: "30"
+      INVITATION_TTL_HOURS: "72"
+      ELEMENTS_PROVIDERS: builtin,uploads,iconify,openverse,wikimedia
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/ddone-pro-elements-canvas-ux
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Make local pack search token based and restore CI
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --reporter=append-only
+
+      - name: Typecheck
+        id: typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee typecheck.log
+
+      - name: Openverse OAuth2 token lifecycle smoke test
+        id: openverse-auth-smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm exec tsx scripts/openverse-auth-smoke.ts 2>&1 | tee openverse-auth-smoke.log
+
+      - name: Build frontend
+        id: frontend-build
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee frontend-build.log
+
+      - name: Runtime API, account and realtime smoke tests
+        id: runtime-smoke
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
+          pnpm start > runtime.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
-          path = Path('src/server/local-asset-packs.ts')
-          text = path.read_text()
-          old = '    .filter((item) => !needle || normalizeQuery([item.name, ...item.tags].join(" ")).includes(needle))'
-          new = '''    .filter((item) => {
-                if (!needle) return true;
-                const haystack = normalizeQuery([item.name, ...item.tags].join(" "));
-                return needle.split(/\\s+/).filter(Boolean).every((term) => haystack.includes(term));
-              })'''.replace('              ', '')
-          if old not in text:
-              raise SystemExit('Expected structural search filter was not found')
-          text = text.replace(old, new, 1)
-          text = text.replace('  tabelle: "table",', '  tabelle: "table",\n  prezzo: "price",\n  prezzi: "prices",\n  listino: "price list",', 1)
-          path.write_text(text)
-          PY
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3006/health > health.json; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              cat runtime.log
+              exit 1
+            fi
+            sleep 1
+          done
+          jq -e '.status == "ok"' health.json
 
-          git show HEAD^:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/server/local-asset-packs.ts .github/workflows/ci.yml
-          git commit -m "fix(elements): search bundled packs by independent terms"
-          git push origin HEAD:feat/ddone-pro-elements-canvas-ux
+          curl --fail --silent --show-error \
+            --cookie-jar cookies.txt \
+            --header 'Content-Type: application/json' \
+            --data '{"email":"admin@example.com","password":"ci-admin-password"}' \
+            http://127.0.0.1:3006/api/auth/login > login.json
+          ORGANIZATION_ID=$(jq -er '.organizations[0].id' login.json)
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header 'Content-Type: application/json' \
+            --data '{"name":"Smoke Test Client"}' \
+            http://127.0.0.1:3006/api/clients > client.json
+          CLIENT_ID=$(jq -er '.id' client.json)
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header "X-Client-ID: ${CLIENT_ID}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"name\":\"Smoke Test Design\",\"client_id\":\"${CLIENT_ID}\"}" \
+            http://127.0.0.1:3006/api/designs > design.json
+          jq -e '.name == "Smoke Test Design"' design.json
+
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            'http://127.0.0.1:3006/api/elements/search?category=ornaments&q=floral' > elements.json
+          jq -e 'length > 0' elements.json
+
+          cat > safe.svg <<'SVG'
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <defs><linearGradient id="g"><stop stop-color="#6d5dfc"/><stop offset="1" stop-color="#171717"/></linearGradient></defs>
+            <circle cx="50" cy="50" r="40" fill="url(#g)"/>
+          </svg>
+          SVG
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header "X-Client-ID: ${CLIENT_ID}" \
+            --form "client_id=${CLIENT_ID}" \
+            --form 'file=@safe.svg;type=image/svg+xml' \
+            http://127.0.0.1:3006/api/uploads > upload.json
+          ASSET_URL=$(jq -er '.url' upload.json)
+          curl --fail --silent --show-error \
+            --cookie cookies.txt \
+            --header "X-Organization-ID: ${ORGANIZATION_ID}" \
+            --header "X-Client-ID: ${CLIENT_ID}" \
+            "http://127.0.0.1:3006${ASSET_URL}" > downloaded.svg
+          grep -q '<svg' downloaded.svg
+
+          curl --fail --silent --show-error http://127.0.0.1:3006/ > home.html
+          grep -q '<div id="app"></div>' home.html
+
+          node scripts/realtime-smoke.mjs cookies.txt design.json 2>&1 | tee realtime-smoke.log
+          node scripts/advanced-api-smoke.mjs 2>&1 | tee advanced-api-smoke.log
+          node scripts/template-application-smoke.mjs 2>&1 | tee template-application-smoke.log
+          node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log
+
+      - name: Build production image
+        id: docker-build
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build -t ddone-open-design:ci . 2>&1 | tee docker-build.log
+
+      - name: Upload CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics
+          path: |
+            pnpm-lock.yaml
+            typecheck.log
+            openverse-auth-smoke.log
+            frontend-build.log
+            runtime.log
+            realtime-smoke.log
+            advanced-api-smoke.log
+            template-application-smoke.log
+            elements-universe-smoke.log
+            health.json
+            login.json
+            client.json
+            design.json
+            elements.json
+            upload.json
+            docker-build.log
+          if-no-files-found: ignore
+          retention-days: 3
