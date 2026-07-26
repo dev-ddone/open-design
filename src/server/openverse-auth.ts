@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { installWikimediaCompliantFetch } from "./wikimedia-fetch.js";
 
 interface OpenverseTokenResponse {
   access_token?: unknown;
@@ -224,5 +225,6 @@ export function installOpenverseAuthenticatedFetch(): OpenverseAuthManager {
     globalThis.fetch = manager.fetch.bind(manager) as typeof fetch;
   }
   console.info(`Openverse authentication mode: ${manager.mode}`);
+  installWikimediaCompliantFetch();
   return manager;
 }
