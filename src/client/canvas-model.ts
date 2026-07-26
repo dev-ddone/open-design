@@ -21,6 +21,13 @@ export const EXTRA_OBJECT_PROPERTIES = [
   "ddoneEffect",
   "ddoneMediaUrl",
   "ddonePosterUrl",
+  "ddoneSmartType",
+  "ddoneSmartVariant",
+  "ddoneSmartData",
+  "ddoneVectorPalette",
+  "ddoneVectorOriginalPalette",
+  "ddoneEffectConfig",
+  "ddoneEffectSourceId",
 ] as const;
 
 export type DDoneFabricObject = fabric.FabricObject & {
@@ -43,6 +50,13 @@ export type DDoneFabricObject = fabric.FabricObject & {
   ddoneEffect?: string;
   ddoneMediaUrl?: string;
   ddonePosterUrl?: string;
+  ddoneSmartType?: "table" | "grid" | "frame";
+  ddoneSmartVariant?: string;
+  ddoneSmartData?: string;
+  ddoneVectorPalette?: string[];
+  ddoneVectorOriginalPalette?: string[];
+  ddoneEffectConfig?: string;
+  ddoneEffectSourceId?: string;
 };
 
 export function ensureObjectId(object: fabric.FabricObject): string {
