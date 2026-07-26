@@ -24,8 +24,8 @@ The Layers tab supports selection, renaming, visibility, locking and ordering. C
 
 ## Image effects
 
-Image Blend and Dissolve store effect configuration and source object references. Their source images can remain hidden rather than being destroyed, so they can be recovered from the Layers panel.
+Image Blend and Dissolve persist their effect parameters on generated results. The current tools still produce rasterized output objects; a later editor revision can use the saved parameters to provide full live re-editing.
 
-## User preferences
+## User preferences API
 
-Element favorites and recent items are synchronized per user and organization. Local storage remains a temporary offline fallback.
+The database migration and authenticated API for per-user favorites, recents and collections are included. The current Elements browser continues to use local storage until the synchronization UI is enabled in a subsequent revision.
