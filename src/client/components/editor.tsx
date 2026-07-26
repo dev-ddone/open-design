@@ -5,6 +5,7 @@ import { CropPanel } from "./crop-panel";
 import { LeftSidebar } from "./left-sidebar";
 import { RightPanel } from "./right-panel";
 import { PagesBar } from "./pages-bar";
+import { EditorContextMenu } from "./editor-context-menu";
 import { useEditor } from "../context";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
@@ -25,6 +26,7 @@ export function Editor() {
         {!readOnly && <RightPanel />}
       </div>
       <CropPanel />
+      <EditorContextMenu />
     </div>
   );
 }
