@@ -1,10 +1,20 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { Layers3, SlidersHorizontal } from "lucide-preact";
 import { LayersPanel } from "./layers-panel";
 import { RightSidebar } from "./right-sidebar";
 
 export function RightPanel() {
   const [tab, setTab] = useState<"properties" | "layers">("properties");
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const requested = (event as CustomEvent<{ tab?: "properties" | "layers" }>).detail?.tab;
+      if (requested === "properties" || requested === "layers") setTab(requested);
+    };
+    window.addEventListener("ddone:open-right-panel", open);
+    return () => window.removeEventListener("ddone:open-right-panel", open);
+  }, []);
+
   return (
     <div class="relative flex h-full shrink-0 flex-col">
       <div class="absolute right-3 top-2 z-20 flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-sm">
