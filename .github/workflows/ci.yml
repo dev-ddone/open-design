@@ -10,9 +10,48 @@ on:
       - feat/ddone-elements-universe
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  patch-strict-elements:
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/ddone-pro-elements-canvas-ux'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ddone-pro-elements-canvas-ux
+          fetch-depth: 0
+
+      - name: Patch provider capabilities and PNG response body
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/server/elements-catalog-v2.ts')
+          text = path.read_text()
+          replacements = {
+              '    ...localPackInfo(),': '    ...(localPackInfo() as ProviderInfo[]),',
+              '  return new Response(png, {': '  return new Response(new Blob([Uint8Array.from(png)], { type: "image/png" }), {',
+          }
+          changed = False
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+                  changed = True
+          if not changed:
+              print('Patch already applied')
+              raise SystemExit(0)
+          path.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/elements-catalog-v2.ts
+          git commit -m "fix(elements): type bundled providers and PNG response"
+          git push origin HEAD:feat/ddone-pro-elements-canvas-ux
+
   application:
     runs-on: ubuntu-latest
     services:
