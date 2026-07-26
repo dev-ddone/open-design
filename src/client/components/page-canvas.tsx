@@ -3,7 +3,9 @@ import * as fabric from "fabric";
 import { useEditor } from "../context";
 import type { Page } from "../types";
 import { applyEditRules, serializeCanvas } from "../canvas-model";
+import { normalizeGroupedObject } from "../canvas/grouping";
 import { installSmartGuides } from "../canvas/smart-guides";
+import type { EditorContextMenuRequest } from "./editor-context-menu";
 
 interface PageCanvasProps {
   page: Page;
@@ -79,6 +81,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
       context.restore();
     };
     const applyControls = (object: fabric.FabricObject) => {
+      normalizeGroupedObject(object);
       object.set(controlStyle);
       for (const key of ["tl", "tr", "bl", "br"]) {
         if (object.controls?.[key]) object.controls[key].render = renderCircle as any;
@@ -99,6 +102,25 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
         beginCropRef.current(target);
       }
     });
+
+    const openContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onActivateRef.current();
+      const target = canvas.findTarget(event as any) ?? null;
+      if (target?.selectable) canvas.setActiveObject(target);
+      else if (!target) canvas.discardActiveObject();
+      canvas.requestRenderAll();
+      const detail: EditorContextMenuRequest = {
+        x: event.clientX,
+        y: event.clientY,
+        pageId: page.id,
+        target,
+      };
+      window.dispatchEvent(new CustomEvent("ddone:context-menu", { detail }));
+    };
+    canvas.upperCanvasEl.addEventListener("contextmenu", openContextMenu);
+
     const uninstallGuides = installSmartGuides(canvas, {
       threshold: 7,
       color: "#d946ef",
@@ -117,6 +139,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
     fabricRef.current = canvas;
     registerCanvas(page.id, canvas);
     return () => {
+      canvas.upperCanvasEl.removeEventListener("contextmenu", openContextMenu);
       uninstallGuides();
       unregisterCanvas(page.id);
       canvas.dispose();
@@ -133,6 +156,7 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
     }
     loadedJsonRef.current = page.canvas_json;
     void canvas.loadFromJSON(JSON.parse(page.canvas_json)).then(() => {
+      canvas.getObjects().forEach(normalizeGroupedObject);
       applyEditRules(canvas, templateEditRules, readOnly);
       canvas.requestRenderAll();
     });
