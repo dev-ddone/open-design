@@ -159,6 +159,8 @@ const STRUCTURAL_ASSETS: StructuralAsset[] = [
 const ITALIAN_ALIASES: Record<string, string> = {
   tabella: "table",
   tabelle: "table",
+  ristorante: "restaurant",
+  ristoranti: "restaurant",
   prezzo: "price",
   prezzi: "prices",
   listino: "price list",
