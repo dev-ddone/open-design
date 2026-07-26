@@ -6,6 +6,7 @@ import templateApplication from "./template-application.js";
 import elementsLocalization from "./elements-localization.js";
 import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
+import elementsCatalogV2 from "./elements-catalog-v2.js";
 import elementsUniverse from "./elements-universe.js";
 import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
@@ -15,7 +16,7 @@ import { validateSvgBytes } from "./svg-security.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 
-// Every SVG returned by a remote Elements provider passes the same restrictive
+// Every SVG returned by an Elements provider passes the same restrictive
 // validation as a user upload before it reaches Fabric.js in the browser.
 app.use("/api/elements-universe/*", async (c, next) => {
   await next();
@@ -26,7 +27,7 @@ app.use("/api/elements-universe/*", async (c, next) => {
     validateSvgBytes(bytes);
   } catch (error) {
     c.res = c.json(
-      { error: error instanceof Error ? `Unsafe remote SVG: ${error.message}` : "Unsafe remote SVG" },
+      { error: error instanceof Error ? `Unsafe SVG: ${error.message}` : "Unsafe SVG" },
       502,
     );
   }
@@ -44,7 +45,9 @@ app.route("/", elementsLocalization);
 app.route("/", assetContent);
 // Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
 app.route("/", elementPackContent);
-// Federated open asset search is mounted before the smaller legacy library.
+// Strict category isolation, real file formats and bundled open-source packs.
+app.route("/", elementsCatalogV2);
+// Older federation endpoints remain available only as compatible content proxies/fallbacks.
 app.route("/", elementsUniverse);
 // Exact guards prevent older endpoints from bypassing invitation and client ACL rules.
 app.route("/", guards);
