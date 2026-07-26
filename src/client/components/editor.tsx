@@ -6,9 +6,11 @@ import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { PagesBar } from "./pages-bar";
 import { useEditor } from "../context";
+import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
   const { readOnly } = useEditor();
+  useEditorShortcuts();
 
   return (
     <div class="relative flex h-full w-full flex-col">
