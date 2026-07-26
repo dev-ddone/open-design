@@ -1,6 +1,6 @@
 import * as fabric from "fabric";
 import { ensureObjectId, type DDoneFabricObject } from "../canvas-model";
-import { isSmartElement } from "./smart-elements";
+import { isSmartElement, readSmartElementData } from "./smart-elements";
 
 export function isActiveSelection(object: fabric.FabricObject | null | undefined): object is fabric.ActiveSelection {
   return object instanceof fabric.ActiveSelection;
@@ -8,6 +8,23 @@ export function isActiveSelection(object: fabric.FabricObject | null | undefined
 
 export function canUngroupObject(object: fabric.FabricObject | null | undefined): object is fabric.Group {
   return object instanceof fabric.Group && !isSmartElement(object);
+}
+
+export function normalizeGroupedObject(object: fabric.FabricObject): void {
+  if (!(object instanceof fabric.Group)) return;
+  object.set({ subTargetCheck: false, interactive: false, objectCaching: false });
+
+  if (!isSmartElement(object)) return;
+  const metadata = object as fabric.Group & DDoneFabricObject;
+  const data = readSmartElementData(object);
+  if (!metadata.ddoneName) {
+    metadata.ddoneName = data?.type === "table"
+      ? "Tabella intelligente"
+      : data?.type === "grid"
+        ? "Griglia intelligente"
+        : "Cornice intelligente";
+  }
+  object.getObjects().forEach((child) => child.set({ selectable: false, evented: false }));
 }
 
 export function groupActiveSelection(canvas: fabric.Canvas): fabric.Group | null {
@@ -28,6 +45,7 @@ export function groupActiveSelection(canvas: fabric.Canvas): fabric.Group | null
   const metadata = group as fabric.Group & DDoneFabricObject;
   metadata.ddoneName = `Gruppo (${selected.length} elementi)`;
   ensureObjectId(group);
+  normalizeGroupedObject(group);
 
   selected.forEach((object) => canvas.remove(object));
   canvas.add(group);
