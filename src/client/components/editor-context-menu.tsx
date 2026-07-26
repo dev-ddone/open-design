@@ -162,8 +162,8 @@ export function EditorContextMenu() {
             {!readOnly && (
               <>
                 <div class="my-1 border-t border-zinc-100" />
-                <MenuItem icon={Layers3} label="Raggruppa selezione" shortcut="Ctrl+G" disabled={!state.canGroup} onClick={() => run(() => state.canvas && groupActiveSelection(state.canvas))} />
-                <MenuItem icon={PanelTopOpen} label="Separa gruppo" shortcut="Ctrl+⇧+G" disabled={!state.canUngroup} onClick={() => run(() => state.canvas && ungroupActiveObject(state.canvas))} />
+                <MenuItem icon={Layers3} label="Raggruppa selezione" shortcut="Ctrl+G" disabled={!state.canGroup} onClick={() => run(() => { if (state.canvas) groupActiveSelection(state.canvas); })} />
+                <MenuItem icon={PanelTopOpen} label="Separa gruppo" shortcut="Ctrl+⇧+G" disabled={!state.canUngroup} onClick={() => run(() => { if (state.canvas) ungroupActiveObject(state.canvas); })} />
                 <MenuItem icon={Copy} label="Duplica" shortcut="Ctrl+D" onClick={() => run(duplicateSelected)} />
 
                 <div class="my-1 border-t border-zinc-100" />
