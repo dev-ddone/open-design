@@ -3,6 +3,7 @@ import type { TemplateEditRules } from "./types";
 
 export const EXTRA_OBJECT_PROPERTIES = [
   "ddoneId",
+  "ddoneName",
   "templateLocked",
   "templateEditable",
   "_isBgImage",
@@ -32,6 +33,7 @@ export const EXTRA_OBJECT_PROPERTIES = [
 
 export type DDoneFabricObject = fabric.FabricObject & {
   ddoneId?: string;
+  ddoneName?: string;
   templateLocked?: boolean;
   templateEditable?: boolean;
   _isBgImage?: boolean;
