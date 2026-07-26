@@ -15,7 +15,7 @@ import { api, getActiveClientId, scopedHeaders } from "../api";
 import type { Design, Page, Template } from "../types";
 import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
-import { ElementsLibrary } from "./elements-library";
+import { ElementsLibraryV2 } from "./elements-library-v2";
 import { BrandKitPanel } from "./brand-kit-panel";
 import { ToolsPanel } from "./tools-panel";
 
@@ -208,7 +208,7 @@ export function LeftSidebar() {
                   </div>
                 )}
 
-                {activeSection === "elements" && canEdit && <ElementsLibrary />}
+                {activeSection === "elements" && canEdit && <ElementsLibraryV2 />}
                 {activeSection === "tools" && canEdit && <ToolsPanel requestedTool={requestedTool} />}
                 {activeSection === "brand" && canEdit && <BrandKitPanel />}
 
@@ -234,9 +234,9 @@ export function LeftSidebar() {
                     <div class="border-2 border-dashed border-zinc-300 rounded-xl p-7 text-center cursor-pointer transition-all hover:border-violet-400 hover:bg-violet-50" onClick={() => canEdit && fileInputRef.current?.click()} onDrop={(event) => { event.preventDefault(); void handleImageUpload(event.dataTransfer?.files ?? null); }} onDragOver={(event) => event.preventDefault()}>
                       <Upload size={25} class="text-zinc-400 mx-auto mb-2" />
                       <p class="text-xs text-zinc-500">{uploading ? "Caricamento…" : "Clicca o trascina qui"}</p>
-                      <p class="text-[10px] text-zinc-400 mt-1">PNG, JPG, SVG, WebP, GIF · massimo 25 MB</p>
+                      <p class="text-[10px] text-zinc-400 mt-1">PNG, JPG, SVG, WebP · massimo 25 MB</p>
                     </div>
-                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" multiple class="hidden" onChange={(event) => void handleImageUpload((event.target as HTMLInputElement).files)} />
+                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple class="hidden" onChange={(event) => void handleImageUpload((event.target as HTMLInputElement).files)} />
                   </div>
                 )}
 
@@ -253,7 +253,7 @@ export function LeftSidebar() {
                       {GRADIENT_PRESETS.map((gradient) => <button key={gradient} class="w-full aspect-square rounded-lg border border-zinc-300 cursor-pointer transition-all hover:scale-105 hover:border-violet-400" style={{ background: gradient }} onClick={() => setBackground("gradient", gradient)} />)}
                     </div>
                     <button class="w-full p-3 rounded-xl bg-white border border-zinc-200 cursor-pointer text-xs text-zinc-500 hover:border-violet-300 hover:text-zinc-800 transition-all" onClick={() => bgFileRef.current?.click()}><Upload size={14} class="inline mr-1.5" /> Carica immagine di sfondo</button>
-                    <input ref={bgFileRef} type="file" accept="image/*" class="hidden" onChange={(event) => void handleBackgroundUpload((event.target as HTMLInputElement).files)} />
+                    <input ref={bgFileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden" onChange={(event) => void handleBackgroundUpload((event.target as HTMLInputElement).files)} />
                   </div>
                 )}
 
