@@ -23,18 +23,23 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'{label} anchor not found')
+              return text.replace(old, new, 1)
+
           elements = Path('src/client/components/elements-library-v2.tsx')
           text = elements.read_text()
-          old = 'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { useEditor } from "../context";'
-          new = 'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { extractVectorPalette } from "../canvas/media-effects";\nimport { smartElementFromSource } from "../canvas/smart-elements";\nimport { useEditor } from "../context";'
-          if old not in text:
-              raise SystemExit('elements import anchor not found')
-          text = text.replace(old, new, 1)
-
-          old = '''  const insertVector = useCallback(async (element: DesignElement) => {
-            if (!canvas) return;
-            const source = element.svg'''
-          new = '''  const insertVector = useCallback(async (element: DesignElement) => {
+          text = replace_once(
+              text,
+              'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { useEditor } from "../context";',
+              'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { extractVectorPalette } from "../canvas/media-effects";\nimport { smartElementFromSource } from "../canvas/smart-elements";\nimport { useEditor } from "../context";',
+              'elements import',
+          )
+          text = replace_once(
+              text,
+              '  const insertVector = useCallback(async (element: DesignElement) => {\n    if (!canvas) return;\n    const source = element.svg',
+              '''  const insertVector = useCallback(async (element: DesignElement) => {
             if (!canvas) return;
             const smart = element.format === "svg" ? await smartElementFromSource(element.id, color) : null;
             if (smart) {
@@ -52,63 +57,59 @@ jobs:
               window.dispatchEvent(new CustomEvent("ddone:smart-element-created", { detail: { type: smart.ddoneSmartType } }));
               return;
             }
-            const source = element.svg'''
-          if old not in text:
-              raise SystemExit('insertVector anchor not found')
-          text = text.replace(old, new, 1)
-
-          old = '''    attachSourceMetadata(object, element);
-            canvas.add(object);'''
-          new = '''    attachSourceMetadata(object, element);
-            extractVectorPalette(object);
-            canvas.add(object);'''
-          if old not in text:
-              raise SystemExit('vector palette anchor not found')
-          text = text.replace(old, new, 1)
+            const source = element.svg'''.replace('\n            ', '\n    '),
+              'insertVector',
+          )
+          text = replace_once(
+              text,
+              '    attachSourceMetadata(object, element);\n    canvas.add(object);',
+              '    attachSourceMetadata(object, element);\n    extractVectorPalette(object);\n    canvas.add(object);',
+              'vector palette',
+          )
           elements.write_text(text)
 
           tools = Path('src/client/components/tools-panel.tsx')
           text = tools.read_text()
-          old = 'import { useEditor } from "../context";'
-          new = 'import { useEditor } from "../context";\nimport { SmartElementPanel } from "./smart-element-panel";\nimport { isSmartElement } from "../canvas/smart-elements";'
-          if old not in text:
-              raise SystemExit('tools import anchor not found')
-          text = text.replace(old, new, 1)
-          text = text.replace('  | "qr";', '  | "qr"\n  | "smart-element";', 1)
-          text = text.replace(
+          text = replace_once(
+              text,
+              'import { useEditor } from "../context";',
+              'import { useEditor } from "../context";\nimport { SmartElementPanel } from "./smart-element-panel";\nimport { isSmartElement } from "../canvas/smart-elements";',
+              'tools import',
+          )
+          text = replace_once(text, '  | "qr";', '  | "qr"\n  | "smart-element";', 'tool id')
+          text = replace_once(
+              text,
               '  { id: "qr", title: "QR Code", description: "QR vettoriali con colori personalizzati.", icon: QrCode, accent: "from-zinc-900 to-zinc-600" },',
               '  { id: "qr", title: "QR Code", description: "QR vettoriali con colori personalizzati.", icon: QrCode, accent: "from-zinc-900 to-zinc-600" },\n  { id: "smart-element", title: "Elemento intelligente", description: "Modifica celle, griglie e cornici mantenendo la struttura.", icon: Frame, accent: "from-violet-600 to-indigo-500" },',
-              1,
+              'smart tool card',
           )
-          text = text.replace(
+          text = replace_once(
+              text,
               '  const selectedImages = activeImages(canvas);',
               '  const selectedImages = activeImages(canvas);\n  const smartSelected = isSmartElement(target);',
-              1,
+              'smart target',
           )
-          text = text.replace(
-              'if (requestedTool && TOOL_CARDS.some((tool) => tool.id === requestedTool)) setActiveTool(requestedTool as ToolId);',
-              'if (requestedTool && TOOL_CARDS.some((tool) => tool.id === requestedTool)) setActiveTool(requestedTool as ToolId);',
-              1,
+          text = replace_once(
+              text,
+              '            const unavailable = tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);',
+              '            const unavailable = tool.id === "smart-element" ? !smartSelected : tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);',
+              'tools availability',
           )
-          old = '            const unavailable = tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);'
-          new = '            const unavailable = tool.id === "smart-element" ? !smartSelected : tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);'
-          if old not in text:
-              raise SystemExit('tools availability anchor not found')
-          text = text.replace(old, new, 1)
-          old = '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;'
-          new = '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  if (activeTool === "smart-element") return <SmartElementPanel />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;'
-          if old not in text:
-              raise SystemExit('tools route anchor not found')
-          text = text.replace(old, new, 1)
+          text = replace_once(
+              text,
+              '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;',
+              '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  if (activeTool === "smart-element") return <SmartElementPanel />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;',
+              'tools route',
+          )
           tools.write_text(text)
 
           catalog = Path('src/server/elements-catalog-v2.ts')
-          text = catalog.read_text()
-          old = '    nextPage: unique.length > 0 ? page + 1 : null,'
-          new = '    nextPage: unique.length >= pageSize ? page + 1 : null,'
-          if old not in text:
-              raise SystemExit('pagination anchor not found')
-          catalog.write_text(text.replace(old, new, 1))
+          catalog.write_text(replace_once(
+              catalog.read_text(),
+              '    nextPage: unique.length > 0 ? page + 1 : null,',
+              '    nextPage: unique.length >= pageSize ? page + 1 : null,',
+              'pagination',
+          ))
 
           types = Path('src/client/types.ts')
           text = types.read_text()
@@ -121,10 +122,7 @@ jobs:
           obsolete = Path('src/client/components/elements-library.tsx')
           if obsolete.exists():
               obsolete.unlink()
-
-          temp = Path('.github/workflows/tmp-smart-elements-patch.yml')
-          if temp.exists():
-              temp.unlink()
+          Path('.github/workflows/tmp-smart-elements-patch.yml').unlink(missing_ok=True)
           PY
 
           git config user.name github-actions[bot]
