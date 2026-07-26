@@ -188,7 +188,7 @@ function itemMatchesFormat(item: CatalogElement, format: CatalogFormat): boolean
 
 function providerInfo(): ProviderInfo[] {
   return [
-    ...localPackInfo(),
+    ...(localPackInfo() as ProviderInfo[]),
     {
       id: "uploads",
       label: "La tua libreria",
@@ -662,7 +662,7 @@ catalog.get("/api/elements-universe/local-pack/:pack/:filename", requireAuth, re
   const size = positiveInt(c.req.query("size"), 512, 2048);
   const png = localPackPng(pack, name, size);
   if (!png) throw new HTTPException(404, { message: "Local PNG not found" });
-  return new Response(png, {
+  return new Response(new Blob([Uint8Array.from(png)], { type: "image/png" }), {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "public, max-age=31536000, immutable",
