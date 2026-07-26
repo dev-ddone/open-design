@@ -129,10 +129,11 @@ hardening.post("/api/uploads", requireAuth, requireOrganization, async (c) => {
     "image/png",
     "image/jpeg",
     "image/webp",
-    "image/gif",
     "image/svg+xml",
   ]);
-  if (!allowed.has(file.type)) throw new HTTPException(400, { message: "Unsupported image format" });
+  if (!allowed.has(file.type)) {
+    throw new HTTPException(400, { message: "Supported formats are PNG, JPG, WebP and SVG" });
+  }
 
   const clientId = typeof form.client_id === "string" && form.client_id ? form.client_id : c.get("clientId");
   if (clientId) {
@@ -157,7 +158,6 @@ hardening.post("/api/uploads", requireAuth, requireOrganization, async (c) => {
     "image/png": "png",
     "image/jpeg": "jpg",
     "image/webp": "webp",
-    "image/gif": "gif",
     "image/svg+xml": "svg",
   };
   const extension = extensionByMime[file.type];
