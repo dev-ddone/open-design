@@ -79,6 +79,13 @@ jobs:
           set -o pipefail
           pnpm exec tsx scripts/openverse-auth-smoke.ts 2>&1 | tee openverse-auth-smoke.log
 
+      - name: Wikimedia identification and retry smoke test
+        id: wikimedia-fetch-smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm exec tsx scripts/wikimedia-fetch-smoke.ts 2>&1 | tee wikimedia-fetch-smoke.log
+
       - name: Build frontend
         id: frontend-build
         shell: bash
@@ -182,6 +189,7 @@ jobs:
             pnpm-lock.yaml
             typecheck.log
             openverse-auth-smoke.log
+            wikimedia-fetch-smoke.log
             frontend-build.log
             runtime.log
             realtime-smoke.log
