@@ -76,4 +76,6 @@ JPG results are opaque raster images and are shown only in the `JPG con sfondo` 
 
 Structural categories are independent catalogs. Selecting Tables returns table layouts only; it does not append the generic icon library. The same isolation applies to Charts, Modules, Grids, Mockups and Shapes.
 
+Local pack search normalizes Italian and English terms and matches words independently, so queries such as `tabella prezzi`, `menu ristorante` and `griglia foto` work even when the global provider query is translated.
+
 The automated runtime suite checks category separation, table search relevance, SVG recoloring metadata, PNG signatures and alpha-channel declarations before a Docker image can pass CI.
