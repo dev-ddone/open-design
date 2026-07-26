@@ -78,4 +78,4 @@ Structural categories are independent catalogs. Selecting Tables returns table l
 
 Local pack search normalizes Italian and English terms and matches words independently, so queries such as `tabella prezzi`, `menu ristorante` and `griglia foto` work even when the global provider query is translated.
 
-The automated runtime suite checks category separation, table search relevance, SVG recoloring metadata, PNG signatures and alpha-channel declarations before a Docker image can pass CI.
+The automated runtime suite checks category separation, table search relevance, SVG recoloring metadata, PNG signatures and alpha-channel declarations before a Docker image can pass CI. Type-check, frontend build, runtime workflows and the production Docker build passed on the final feature commit.
