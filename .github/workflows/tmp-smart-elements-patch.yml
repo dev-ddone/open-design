@@ -1,0 +1,134 @@
+name: One-shot smart elements integration
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-smart-elements:
+    if: github.head_ref == 'feat/ddone-smart-elements-editor'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ddone-smart-elements-editor
+          fetch-depth: 0
+
+      - name: Integrate smart structures and clean unsupported types
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          elements = Path('src/client/components/elements-library-v2.tsx')
+          text = elements.read_text()
+          old = 'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { useEditor } from "../context";'
+          new = 'import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";\nimport { extractVectorPalette } from "../canvas/media-effects";\nimport { smartElementFromSource } from "../canvas/smart-elements";\nimport { useEditor } from "../context";'
+          if old not in text:
+              raise SystemExit('elements import anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  const insertVector = useCallback(async (element: DesignElement) => {
+            if (!canvas) return;
+            const source = element.svg'''
+          new = '''  const insertVector = useCallback(async (element: DesignElement) => {
+            if (!canvas) return;
+            const smart = element.format === "svg" ? await smartElementFromSource(element.id, color) : null;
+            if (smart) {
+              const scale = Math.min((canvasWidth * 0.58) / (smart.width || 1), (canvasHeight * 0.58) / (smart.height || 1), 1.5);
+              smart.set({
+                left: canvasWidth / 2 - ((smart.width || 0) * scale) / 2,
+                top: canvasHeight / 2 - ((smart.height || 0) * scale) / 2,
+                scaleX: scale,
+                scaleY: scale,
+              });
+              attachSourceMetadata(smart, element);
+              canvas.add(smart);
+              canvas.setActiveObject(smart);
+              canvas.requestRenderAll();
+              window.dispatchEvent(new CustomEvent("ddone:smart-element-created", { detail: { type: smart.ddoneSmartType } }));
+              return;
+            }
+            const source = element.svg'''
+          if old not in text:
+              raise SystemExit('insertVector anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    attachSourceMetadata(object, element);
+            canvas.add(object);'''
+          new = '''    attachSourceMetadata(object, element);
+            extractVectorPalette(object);
+            canvas.add(object);'''
+          if old not in text:
+              raise SystemExit('vector palette anchor not found')
+          text = text.replace(old, new, 1)
+          elements.write_text(text)
+
+          tools = Path('src/client/components/tools-panel.tsx')
+          text = tools.read_text()
+          old = 'import { useEditor } from "../context";'
+          new = 'import { useEditor } from "../context";\nimport { SmartElementPanel } from "./smart-element-panel";\nimport { isSmartElement } from "../canvas/smart-elements";'
+          if old not in text:
+              raise SystemExit('tools import anchor not found')
+          text = text.replace(old, new, 1)
+          text = text.replace('  | "qr";', '  | "qr"\n  | "smart-element";', 1)
+          text = text.replace(
+              '  { id: "qr", title: "QR Code", description: "QR vettoriali con colori personalizzati.", icon: QrCode, accent: "from-zinc-900 to-zinc-600" },',
+              '  { id: "qr", title: "QR Code", description: "QR vettoriali con colori personalizzati.", icon: QrCode, accent: "from-zinc-900 to-zinc-600" },\n  { id: "smart-element", title: "Elemento intelligente", description: "Modifica celle, griglie e cornici mantenendo la struttura.", icon: Frame, accent: "from-violet-600 to-indigo-500" },',
+              1,
+          )
+          text = text.replace(
+              '  const selectedImages = activeImages(canvas);',
+              '  const selectedImages = activeImages(canvas);\n  const smartSelected = isSmartElement(target);',
+              1,
+          )
+          text = text.replace(
+              'if (requestedTool && TOOL_CARDS.some((tool) => tool.id === requestedTool)) setActiveTool(requestedTool as ToolId);',
+              'if (requestedTool && TOOL_CARDS.some((tool) => tool.id === requestedTool)) setActiveTool(requestedTool as ToolId);',
+              1,
+          )
+          old = '            const unavailable = tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);'
+          new = '            const unavailable = tool.id === "smart-element" ? !smartSelected : tool.requiresImage && !selectedImage && !(tool.id === "blend" && selectedImages.length >= 2);'
+          if old not in text:
+              raise SystemExit('tools availability anchor not found')
+          text = text.replace(old, new, 1)
+          old = '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;'
+          new = '  if (activeTool === "wave") return <WaveTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;\n  if (activeTool === "smart-element") return <SmartElementPanel />;\n  return <QrTool canvas={canvas} canvasWidth={canvasWidth} canvasHeight={canvasHeight} onBack={onBack} />;'
+          if old not in text:
+              raise SystemExit('tools route anchor not found')
+          text = text.replace(old, new, 1)
+          tools.write_text(text)
+
+          catalog = Path('src/server/elements-catalog-v2.ts')
+          text = catalog.read_text()
+          old = '    nextPage: unique.length > 0 ? page + 1 : null,'
+          new = '    nextPage: unique.length >= pageSize ? page + 1 : null,'
+          if old not in text:
+              raise SystemExit('pagination anchor not found')
+          catalog.write_text(text.replace(old, new, 1))
+
+          types = Path('src/client/types.ts')
+          text = types.read_text()
+          text = text.replace('  | "animations"\n  | "videos"\n  | "audio"\n', '')
+          text = text.replace('  | "models3d"\n', '')
+          text = text.replace('export type ElementKind = "vector" | "image" | "gif" | "video" | "audio" | "model";', 'export type ElementKind = "vector" | "image";')
+          text = text.replace('export type ElementFormat = "svg" | "png" | "jpg" | "webp" | "gif" | "mp4" | "mp3" | "wav" | "glb" | "gltf" | "other";', 'export type ElementFormat = "svg" | "png" | "jpg" | "webp" | "other";')
+          types.write_text(text)
+
+          obsolete = Path('src/client/components/elements-library.tsx')
+          if obsolete.exists():
+              obsolete.unlink()
+
+          temp = Path('.github/workflows/tmp-smart-elements-patch.yml')
+          if temp.exists():
+              temp.unlink()
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat(editor): integrate intelligent structures and strict media types"
+          git push origin HEAD:feat/ddone-smart-elements-editor
