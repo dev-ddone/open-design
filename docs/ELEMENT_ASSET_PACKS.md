@@ -75,3 +75,5 @@ JPG results are opaque raster images and are shown only in the `JPG con sfondo` 
 ## Category isolation
 
 Structural categories are independent catalogs. Selecting Tables returns table layouts only; it does not append the generic icon library. The same isolation applies to Charts, Modules, Grids, Mockups and Shapes.
+
+The automated runtime suite checks category separation, table search relevance, SVG recoloring metadata, PNG signatures and alpha-channel declarations before a Docker image can pass CI.
