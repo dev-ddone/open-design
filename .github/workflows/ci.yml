@@ -185,7 +185,7 @@ jobs:
           node scripts/element-preferences-smoke.mjs cookies.txt login.json 2>&1 | tee element-preferences-smoke.log
           node scripts/design-review-smoke.mjs cookies.txt login.json design.json 2>&1 | tee design-review-smoke.log
           node scripts/page-order-smoke.mjs cookies.txt login.json client.json design.json 2>&1 | tee page-order-smoke.log
-          node scripts/studio-3-smoke.mjs 2>&1 | tee studio-3-smoke.log
+          BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-updated node scripts/studio-3-smoke.mjs 2>&1 | tee studio-3-smoke.log
           node scripts/studio-raster-extra-smoke.mjs 2>&1 | tee studio-raster-extra-smoke.log
 
       - name: Install Playwright Chromium
