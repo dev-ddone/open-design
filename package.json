@@ -1,6 +1,6 @@
 {
   "name": "@ddone/open-design",
-  "version": "2.9.0-alpha.1",
+  "version": "2.10.0-alpha.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.5",
