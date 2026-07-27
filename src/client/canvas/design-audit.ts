@@ -7,7 +7,7 @@ export type AuditSeverity = "error" | "warning" | "info";
 export interface DesignAuditIssue {
   id: string;
   severity: AuditSeverity;
-  category: "layout" | "brand" | "typography" | "license" | "accessibility";
+  category: "layout" | "brand" | "typography" | "license" | "accessibility" | "template";
   title: string;
   detail: string;
   objectId?: string;
@@ -65,6 +65,15 @@ function addIssue(
   });
 }
 
+function templateFieldValue(object: fabric.FabricObject): string {
+  const metadata = object as DDoneFabricObject;
+  if (isTextObject(object)) return String((object as fabric.Textbox).text ?? "").trim();
+  if (object instanceof fabric.FabricImage) {
+    return String(metadata.ddoneMediaUrl ?? (object as any).getSrc?.() ?? "").trim();
+  }
+  return metadata.ddoneFieldDefault?.trim() ?? "";
+}
+
 export function auditDesign(
   canvas: fabric.Canvas,
   canvasWidth: number,
@@ -75,6 +84,7 @@ export function auditDesign(
   const allowedColors = new Set((brandKit?.colors ?? []).map(normalizeDesignColor).filter(Boolean) as string[]);
   const allowedFonts = new Set((brandKit?.fonts ?? []).map((font) => font.trim().toLowerCase()).filter(Boolean));
   const neutralColors = new Set(["#000000", "#ffffff", "#18181b", "#27272a"]);
+  const fieldObjects = new Map<string, fabric.FabricObject[]>();
   let checkedObjects = 0;
 
   for (const root of canvas.getObjects()) {
@@ -126,7 +136,29 @@ export function auditDesign(
           addIssue(issues, object, "warning", "license", "Autore non indicato", "Conserva autore o testo di attribuzione prima della pubblicazione.");
         }
       }
+
+      if (metadata.ddoneFieldKey) {
+        const objects = fieldObjects.get(metadata.ddoneFieldKey) ?? [];
+        objects.push(object);
+        fieldObjects.set(metadata.ddoneFieldKey, objects);
+        if (!metadata.ddoneFieldType) {
+          addIssue(issues, object, "error", "template", "Campo senza tipo", `Il campo ${metadata.ddoneFieldKey} non ha un tipo semantico.`);
+        }
+        if (metadata.ddoneFieldRequired && !templateFieldValue(object) && !metadata.ddoneFieldDefault?.trim()) {
+          addIssue(issues, object, "error", "template", "Campo obbligatorio vuoto", `${metadata.ddoneFieldLabel || metadata.ddoneFieldKey} deve avere un valore o un default.`);
+        }
+        if (!metadata.ddoneFieldLabel?.trim()) {
+          addIssue(issues, object, "info", "template", "Campo senza etichetta", `Aggiungi un’etichetta leggibile a ${metadata.ddoneFieldKey}.`);
+        }
+      }
     });
+  }
+
+  for (const [key, objects] of fieldObjects) {
+    if (objects.length < 2) continue;
+    for (const object of objects) {
+      addIssue(issues, object, "error", "template", "Chiave campo duplicata", `${key} è assegnato a più oggetti.`);
+    }
   }
 
   if (canvas.getObjects().length === 0) {
