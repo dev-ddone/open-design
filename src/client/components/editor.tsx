@@ -13,6 +13,7 @@ import { CommandPalette } from "./command-palette";
 import { NotificationCenter } from "./notification-center";
 import { RemotePresenceOverlay } from "./remote-presence-overlay";
 import { CollaborationStatusBanner } from "./collaboration-status-banner";
+import { PluginManager } from "./plugin-manager";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -36,6 +37,7 @@ export function Editor() {
       <ReviewCommentPins />
       <AssetPickerHost />
       <CommandPalette />
+      <PluginManager />
       <CropPanel />
       <EditorContextMenu />
     </div>
