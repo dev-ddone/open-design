@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import visualGoldens from "./visual-goldens.json";
+import visualGoldens from "./visual-goldens";
 import { openCommand, openFreshDesign } from "./helpers";
 
 function screenshotHash(buffer: Buffer): string {
