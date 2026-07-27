@@ -10,8 +10,11 @@ test("command palette opens page overview and asset library", async ({ page }) =
 
   await openCommand(page, "Apri asset picker");
   await expect(page.getByRole("heading", { name: "Libreria immagini e PNG" })).toBeVisible();
-  await expect(page.getByText("DDone PNG Studio", { exact: true })).toBeVisible();
-  await expect(page.locator('img[src*="/api/studio-raster/"]').first()).toBeVisible();
+  await page.getByRole("button", { name: "PNG e grafiche", exact: true }).click();
+  const studioProvider = page.getByRole("button", { name: "DDone PNG Studio", exact: true });
+  await expect(studioProvider).toBeVisible();
+  await studioProvider.click();
+  await expect(page.locator('img[src*="/api/studio-raster"]').first()).toBeVisible();
   await page.keyboard.press("Escape");
 });
 
