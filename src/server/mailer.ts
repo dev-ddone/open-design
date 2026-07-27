@@ -107,6 +107,32 @@ export async function sendInvitationEmail(input: {
   });
 }
 
+export async function sendWorkspaceNotificationEmail(input: {
+  email: string;
+  name: string;
+  title: string;
+  body: string;
+  actionUrl: string;
+}): Promise<void> {
+  const safeName = escapeHtml(input.name);
+  const safeTitle = escapeHtml(input.title);
+  const safeBody = escapeHtml(input.body).replace(/\n/g, "<br/>");
+  const safeUrl = escapeHtml(input.actionUrl);
+  await deliver({
+    to: input.email,
+    subject: input.title,
+    sensitiveUrl: input.actionUrl,
+    text: `Ciao ${input.name},\n\n${input.title}\n${input.body}\n\nApri il progetto: ${input.actionUrl}`,
+    html: `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;color:#18181b">
+      <h1 style="font-size:20px">${safeTitle}</h1>
+      <p>Ciao ${safeName},</p>
+      <p style="line-height:1.6">${safeBody}</p>
+      <p style="margin:28px 0"><a href="${safeUrl}" style="display:inline-block;background:#6d5dfc;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600">Apri in DDone Design</a></p>
+      <p style="font-size:12px;color:#71717a;word-break:break-all">${safeUrl}</p>
+    </div>`,
+  });
+}
+
 export async function verifyEmailTransport(): Promise<void> {
   if (config.email.delivery === "smtp") await getTransporter().verify();
 }
