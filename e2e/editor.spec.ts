@@ -37,11 +37,11 @@ test("gradient and dissolve tools expose editable nodes", async ({ page }) => {
   await expect(gradient.getByText("Nodo selezionato")).toBeVisible();
   await gradient.getByRole("button", { name: "Aggiungi nodo" }).click();
   await expect(gradient.getByTitle(/%/).first()).toBeVisible();
-  await gradient.getByRole("button", { name: /close|chiudi/i }).click().catch(async () => page.keyboard.press("Escape"));
 
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("ddone:open-tool", { detail: { tool: "dissolve" } })));
   const dissolve = page.getByRole("dialog", { name: "Dissolvenza avanzata" });
   await expect(dissolve).toBeVisible();
+  await expect(gradient).toBeHidden();
   await expect(dissolve.getByText("Nodi alpha")).toBeVisible();
   await expect(dissolve.getByText("Inizio dissolvenza")).toBeVisible();
   await expect(dissolve.getByText("Fine dissolvenza")).toBeVisible();
