@@ -29,7 +29,14 @@ export const EXTRA_OBJECT_PROPERTIES = [
   "ddoneVectorOriginalPalette",
   "ddoneEffectConfig",
   "ddoneEffectSourceId",
+  "ddoneFieldKey",
+  "ddoneFieldLabel",
+  "ddoneFieldType",
+  "ddoneFieldRequired",
+  "ddoneFieldDefault",
 ] as const;
+
+export type DDoneTemplateFieldType = "text" | "price" | "cta" | "image" | "logo";
 
 export type DDoneFabricObject = fabric.FabricObject & {
   ddoneId?: string;
@@ -59,6 +66,11 @@ export type DDoneFabricObject = fabric.FabricObject & {
   ddoneVectorOriginalPalette?: string[];
   ddoneEffectConfig?: string;
   ddoneEffectSourceId?: string;
+  ddoneFieldKey?: string;
+  ddoneFieldLabel?: string;
+  ddoneFieldType?: DDoneTemplateFieldType;
+  ddoneFieldRequired?: boolean;
+  ddoneFieldDefault?: string;
 };
 
 export function ensureObjectId(object: fabric.FabricObject): string {
