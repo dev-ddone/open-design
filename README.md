@@ -2,17 +2,27 @@
 
 # DDone Design
 
-A self-hosted, open-source Canva-like workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and integrated creative tools.
+A self-hosted, open-source static design workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and integrated creative tools.
+
+## Static product scope
+
+DDone Design focuses on social graphics, print layouts, presentations, brand-controlled templates and collaborative agency workflows. Video editing, audio, animated timelines, GIF animation tooling and 3D are intentionally outside scope.
+
+The current release is `2.6.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
 
 ## Included
 
 - **Organizations and users** with secure cookie authentication.
 - **Roles:** `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, including client-specific access.
-- **Realtime object-level collaboration** with presence and remote cursors.
+- **Realtime object-level collaboration** with presence and collaborator indicators.
 - **Persistent versions**, restore and safety snapshots.
 - **PNG, JPG, SVG and multi-page PDF export.**
 - **Client brand kits** and selectively editable templates.
-- **PostgreSQL** for accounts, ACLs, designs, versions, templates and collaboration state.
+- **Layers, grouping, precision controls and keyboard shortcuts.**
+- **Editable smart tables, grids and frames.**
+- **Static Smart Resize** for common social, print and presentation formats.
+- **Design Audit** for layout, brand, readability and attribution checks.
+- **PostgreSQL** for accounts, ACLs, designs, versions, templates, preferences and collaboration state.
 - **S3/MinIO or local storage** for private uploads.
 - **Docker Compose and Coolify deployment** with health checks and automatic migrations.
 
@@ -22,12 +32,13 @@ The Elements sidebar performs one federated search across:
 
 - DDone curated vectors;
 - private organization/client uploads;
-- Iconify and its open icon/emoji collections;
+- bundled Tabler Icons and Twemoji;
+- Iconify and its open icon collections;
 - Openverse openly licensed and public-domain media;
 - Wikimedia Commons;
 - optional administrator-managed HTTPS manifest packs.
 
-Available categories include icons, emoji, illustrations, photos, ornaments, frames, food, cocktails, backgrounds, patterns and social assets. Results support source filters, pagination, favorites, recents and quick searches.
+Available categories include shapes, tables, grids, charts, icons, emoji, illustrations, photos, ornaments, frames, food, cocktails, backgrounds, patterns and social assets. Results support source filters, pagination, favorites, recents and quick searches.
 
 Every inserted remote work keeps these fields inside the Fabric object and saved design:
 
@@ -38,7 +49,7 @@ Every inserted remote work keeps these fields inside the Fabric object and saved
 - attribution text;
 - whether attribution is required.
 
-Provider failures are isolated: a temporary failure of one archive returns a warning while results from healthy providers remain available.
+Provider failures are isolated: a temporary failure of one archive returns a warning while results from healthy providers remain available. Favorites, recent items and named collections have authenticated organization-scoped persistence, with browser storage retained as an offline cache.
 
 ### Provider configuration
 
@@ -60,12 +71,11 @@ For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVER
 
 `OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. No scheduled task, cron job or persistent token storage is required. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
 
-## Creative tools
+## Creative and quality tools
 
-The **Strumenti** sidebar includes:
+The editor includes:
 
-- object opacity;
-- configurable drop shadows;
+- object opacity and configurable drop shadows;
 - brightness, contrast, saturation and blur;
 - grayscale and invert;
 - selected-color transparency;
@@ -73,9 +83,11 @@ The **Strumenti** sidebar includes:
 - gradient backgrounds;
 - dot, stripe, grid and checker patterns;
 - random blob and wave generators;
-- vector QR code generation.
+- vector QR code generation;
+- static Smart Resize;
+- automatic design and brand audit.
 
-Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration.
+Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration. Some raster image effects intentionally produce a new raster result rather than a live editable filter stack.
 
 ## Quick start
 
@@ -122,6 +134,12 @@ Frontend development URL: `http://localhost:5178`.
 
 API and production URL: `http://localhost:3006`.
 
+Run the local quality gate with:
+
+```bash
+pnpm check
+```
+
 ## Permission model
 
 | Capability | Owner | Admin | Editor | Viewer |
@@ -152,9 +170,10 @@ See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
 ```text
 src/client
   Preact UI
-  Fabric.js multi-page editor
+  Fabric.js multi-page static editor
+  layers, smart structures and precision tools
   federated Elements browser
-  integrated creative tools
+  Smart Resize and Design Audit
   client ACL and brand-kit controls
   object-level Yjs collaboration
 
