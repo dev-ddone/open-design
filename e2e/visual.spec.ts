@@ -27,7 +27,12 @@ test("asset picker and PNG Studio grid are visually stable @visual", async ({ pa
   await openCommand(page, "Apri asset picker");
   const dialog = page.getByRole("dialog", { name: "Libreria immagini e PNG" });
   await expect(dialog).toBeVisible();
-  await page.waitForTimeout(900);
+  await page.getByRole("button", { name: "PNG e grafiche", exact: true }).click();
+  const studioProvider = page.getByRole("button", { name: "DDone PNG Studio", exact: true });
+  await expect(studioProvider).toBeVisible();
+  await studioProvider.click();
+  await expect(page.locator('img[src*="/api/studio-raster"]').first()).toBeVisible();
+  await page.waitForTimeout(500);
   const screenshot = await dialog.screenshot();
   await testInfo.attach("asset-picker-actual", { body: screenshot, contentType: "image/png" });
   expect(screenshotHash(screenshot)).toBe(visualGoldens.assetPickerChromiumLinux);
