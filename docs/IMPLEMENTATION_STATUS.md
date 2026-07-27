@@ -1,6 +1,6 @@
 # Implementation status
 
-This document describes `feat/ddone-smart-elements-editor` at version `2.6.0-alpha.1`. It separates code that exists from workflows that are proven end to end.
+This document describes `feat/ddone-smart-elements-editor` at version `2.8.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
 
 ## Status levels
 
@@ -12,7 +12,7 @@ This document describes `feat/ddone-smart-elements-editor` at version `2.6.0-alp
 
 ## Product maturity
 
-DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, the Fabric editor foundation and static Elements packs. It is not yet a complete Canva replacement.
+DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations and controlled review workflows. It is not yet a complete Canva replacement.
 
 ## Verified
 
@@ -40,12 +40,27 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Local provider filtering and pagination regressions have automated coverage.
 - User/organization preference storage supports favorite IDs, complete favorite cards, recent items and named collections.
 
+### Review workflow
+
+- Persistent design review state.
+- Comments attached to design, page or object.
+- Comment resolution and reopening.
+- Draft, in-review, changes-requested and approved transitions.
+- Runtime smoke coverage for comment and approval persistence.
+
+### Data and template utilities
+
+- Semantic field metadata is serialized with Fabric objects.
+- CSV parser supports quoted fields and comma/semicolon detection.
+- Serialized data merge has unit coverage for text, image and nested group fields.
+- Design Audit detects missing required fields and duplicate field keys.
+
 ### Quality gate
 
 - TypeScript typecheck.
 - Node unit and regression tests.
 - Openverse and Wikimedia smoke tests.
-- Runtime API, Elements, template, version and realtime smoke tests.
+- Runtime API, Elements, template, version, review and realtime smoke tests.
 - Preference persistence smoke test.
 - Frontend and production Docker builds.
 
@@ -65,8 +80,13 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 ### Static productivity
 
-- Static Smart Resize for common social, print and presentation formats.
-- Design Audit for page bounds, text size, brand fonts/colors, layer naming and required attribution.
+- Smart Resize for common social, print and presentation formats.
+- Resized campaign copies created as independent designs with their own dimensions.
+- Design Audit for page bounds, semantic template fields, text size, brand fonts/colors, layer naming and attribution.
+- CSV and Markdown attribution reports.
+- Semantic template fields for text, price, CTA, image and logo.
+- Apply one CSV record to the open page.
+- Generate up to 100 pages from CSV with a safety version.
 - Federated search across enabled static providers.
 - Server-synchronized preference bridge with browser-local offline cache.
 
@@ -76,37 +96,55 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Persistent collaboration state.
 - Presence metadata and collaborator indicators.
 - Multipage object synchronization foundations.
+- Review panel for comments and approval decisions.
 
 ## Partial
 
-### Smart Resize
+### Smart Resize and campaign variants
 
-- It transforms the current page only.
-- It does not yet create linked campaign variants.
-- It scales and repositions objects but does not perform semantic text reflow or content-priority layout decisions.
+- Geometric scaling and relative positioning are implemented.
+- Separate campaign designs can be generated.
+- Variants are independent after creation and are not live-linked.
+- Semantic text reflow and content-priority layout decisions are not implemented.
 
-### Design Audit
+### Design Audit and governance
 
 - It reports and selects problematic objects.
-- It does not yet automatically repair issues or block export/approval.
+- It exports attribution data.
+- It does not yet repair issues or block export/approval automatically.
 - Contrast analysis and complete WCAG validation are not yet implemented.
 
 ### Templates and brand kits
 
-- Templates, edit rules and brand-kit records exist.
+- Templates, edit rules, semantic fields and brand-kit records exist.
 - Locking and editable regions require wider browser-level coverage.
-- Placeholders are still object-ID rules, not semantic text/image/logo/price fields.
+- Image/logo fields currently accept a resolvable URL instead of an integrated asset-picker replacement flow.
 - Brand application is not yet a one-click document-wide migration workflow.
+
+### Data-driven production
+
+- CSV application and multipage generation are implemented.
+- Native XLSX parsing remains pending.
+- Generated pages are static snapshots, not live-linked records.
+- Rich charts and tables are not yet bound to spreadsheet data.
+- Batch export of generated records remains pending.
+
+### Review UX
+
+- Comments can target an object or page and can be resolved.
+- Comments do not yet render as pins over the canvas.
+- Mentions, notifications and email delivery are pending.
+- Approval does not currently enforce an export gate.
 
 ### Preferences and collections
 
 - Preferences persist across user and organization sessions.
 - The existing Elements panel remains local-first, so remote changes appear after reopening the panel or reloading the editor.
-- Complete collection management UI is still pending.
+- Complete collection-management UI remains pending.
 
 ### Collaboration UX
 
-- Presence is available, but production-grade remote cursors, comments and conflict communication remain incomplete.
+- Presence is available, but production-grade remote cursors and conflict communication remain incomplete.
 - Offline and reconnect behavior lacks a dedicated automated browser suite.
 
 ### Production readiness
@@ -114,17 +152,16 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - No Playwright editor journey suite yet.
 - No screenshot visual-regression or export golden-file suite yet.
 - Keyboard-only, WCAG and tablet acceptance coverage remain incomplete.
-- The stacked PR history should be consolidated before a stable release.
+- The stacked PR history must be consolidated before a stable release.
 
 ## Planned
 
-- Semantic template placeholders and required-field validation.
-- Object comments, mentions and approval workflow.
-- Client-safe review and export approval gates.
-- CSV/XLSX bulk creation.
+- Native XLSX import.
 - Data-bound editable tables and charts.
-- Batch export and generated campaign variants.
-- Automated attribution report during export.
+- Batch export for generated pages/records.
+- Export gates based on approval status and audit errors.
+- Canvas comment pins, mentions and notifications.
+- Playwright and visual/export regression suites.
 - Plugin/extension SDK and documented public integration contracts.
 
 ## Out of scope
