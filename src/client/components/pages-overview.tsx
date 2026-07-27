@@ -184,13 +184,16 @@ export function PagesOverview({ onClose }: PagesOverviewProps) {
                 draggable={!readOnly && !query.trim() && !working}
                 onDragStart={(event) => {
                   setDraggedId(page.id);
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", page.id);
+                  const transfer = event.dataTransfer;
+                  if (!transfer) return;
+                  transfer.effectAllowed = "move";
+                  transfer.setData("text/plain", page.id);
                 }}
                 onDragOver={(event) => {
                   if (!draggedId || readOnly || query.trim()) return;
                   event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
+                  const transfer = event.dataTransfer;
+                  if (transfer) transfer.dropEffect = "move";
                   setDropTargetId(page.id);
                 }}
                 onDragLeave={() => setDropTargetId((current) => current === page.id ? null : current)}
