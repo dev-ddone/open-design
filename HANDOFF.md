@@ -12,7 +12,7 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 
 ## Current version
 
-`2.8.0-alpha.1`
+`2.9.0-alpha.1`
 
 ## What is implemented
 
@@ -29,9 +29,16 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 - SVG palette editing and image tools;
 - synchronized favorites, recent items and collection persistence;
 - static Smart Resize and separate resized campaign designs;
+- multi-select resize formats and batch campaign project creation;
+- recently used resize formats;
 - Design Audit for brand, layout, accessibility, templates and attribution;
 - CSV/Markdown attribution reports;
 - design comments tied to page or object;
+- numbered contextual comment pins over canvas pages;
+- object-linked pins that follow Fabric objects;
+- normalized page-comment coordinates;
+- comment search, page/object filters, replies and mention metadata;
+- review access for Viewer/read-only sessions;
 - review states: draft, in review, changes requested and approved;
 - semantic template fields for text, price, CTA, image and logo;
 - required-field and duplicate-key validation;
@@ -44,7 +51,8 @@ Migrations run automatically at startup. Relevant recent migrations:
 
 - `003_element_preferences.sql` creates user/organization preference storage;
 - `004_element_preference_items.sql` stores complete favorite cards for cross-device rendering;
-- `005_design_reviews.sql` adds review state and page/object comments.
+- `005_design_reviews.sql` adds review state and page/object comments;
+- `006_design_comment_anchors.sql` adds normalized pin coordinates, mention metadata and an open-comment index.
 
 Existing PostgreSQL and MinIO volumes remain compatible. Back up both before staging deployment.
 
@@ -56,24 +64,28 @@ pnpm install --no-frozen-lockfile
 pnpm check
 ```
 
-The CI workflow additionally boots PostgreSQL, starts the production server, runs migrations, verifies authentication/client/design flows, tests Elements, realtime collaboration, preferences and the design-review workflow, then builds the production Docker image.
+The CI workflow additionally boots PostgreSQL, starts the production server, runs migrations, verifies authentication/client/design flows, tests Elements, realtime collaboration, preferences and contextual review, then builds the production Docker image.
 
 ## Required staging acceptance
 
 1. Log in as OWNER, client EDITOR and VIEWER.
-2. Create a multipage design and verify permissions.
-3. Insert local and remote SVG/image assets.
-4. Favorite an element, open another browser session and verify synchronization after reopening the Elements panel.
-5. Insert and edit a smart table and photo grid.
-6. Group objects, reorder layers and use keyboard movement.
-7. Run Smart Resize and create a separate story/A4 campaign variant.
-8. Apply a brand kit and run Controllo design.
-9. Export CSV and Markdown attribution reports.
-10. Mark text, price and image objects as semantic template fields.
-11. Import a CSV, apply one record and generate multiple pages.
-12. Add an object comment, resolve it, request review and approve the design.
-13. Export PNG, SVG and multipage PDF and compare visually.
-14. Edit simultaneously from two browsers and test reconnect.
+2. Verify that Viewer sees comments but not editing tools.
+3. Create a multipage design and verify permissions.
+4. Insert local and remote SVG/image assets.
+5. Favorite an element, open another browser session and verify synchronization after reopening the Elements panel.
+6. Insert and edit a smart table and photo grid.
+7. Group objects, reorder layers and use keyboard movement.
+8. Select multiple Smart Resize formats and create a campaign batch.
+9. Open every generated variant and inspect its dimensions and layout.
+10. Apply a brand kit and run Controllo design.
+11. Export CSV and Markdown attribution reports.
+12. Mark text, price and image objects as semantic template fields.
+13. Import a CSV, apply one record and generate multiple pages.
+14. Add an object comment and verify that its pin follows the object.
+15. Add a page comment, reply, filter by page/object and resolve the thread.
+16. Verify mention chips, request review and approve the design.
+17. Export PNG, SVG and multipage PDF and compare visually.
+18. Edit simultaneously from two browsers and test reconnect.
 
 ## Known limitations
 
@@ -81,7 +93,8 @@ The CI workflow additionally boots PostgreSQL, starts the production server, run
 - Resized campaign designs and CSV-generated pages are independent after creation, not live-linked variants.
 - The audit reports issues but does not yet block export or automatically repair them.
 - Review approval does not yet enforce an export gate.
-- Comments do not yet render as canvas pins and mentions/email notifications are not delivered.
+- Comment pins cannot yet be freely dragged or attached to rectangular regions.
+- Mention metadata is stored and displayed, but in-app/email notification delivery is not implemented.
 - Preference synchronization uses the existing local-first Elements UI; remote changes appear when the panel is reopened or the editor is reloaded.
 - Named collections are persisted, but complete collection-management UI remains pending.
 - CSV is supported; native XLSX parsing remains pending.
@@ -94,12 +107,21 @@ The CI workflow additionally boots PostgreSQL, starts the production server, run
 ## Next implementation order
 
 1. consolidate PR #5 with the current PR #4 head;
-2. Playwright editor journeys and screenshot/export visual regression;
-3. native XLSX import and data-bound smart tables/charts;
-4. approval and audit export gates;
-5. object comment pins, mentions and notifications;
-6. production-grade remote cursors and reconnect tests;
-7. plugin/extension SDK and public integration contracts.
+2. approval and audit export gates;
+3. native XLSX import, record preview and column mapping;
+4. batch export for generated pages and campaign variants;
+5. drag-to-position pins, comment regions and mention/approval notifications;
+6. thumbnail/grid page overview for large documents;
+7. integrated asset replacement for semantic image/logo fields;
+8. one-click brand migration and logo replacement;
+9. Playwright editor journeys and screenshot/export visual regression;
+10. production-grade remote cursors and reconnect tests;
+11. command palette and searchable shortcut reference;
+12. plugin/extension SDK and public integration contracts.
+
+## Competitive UX research
+
+See `docs/UX_COMPETITIVE_RESEARCH.md` for the reviewed Canva, Adobe Express, Figma and VistaCreate patterns, the adopted product decisions and the remaining prioritized gaps.
 
 ## Release documentation
 
