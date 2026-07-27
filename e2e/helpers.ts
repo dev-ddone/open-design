@@ -15,7 +15,13 @@ export async function openFreshDesign(page: Page): Promise<void> {
   await login(page);
   await page.getByRole("button", { name: "New Design", exact: true }).click();
   await page.waitForURL(/\/design\//);
-  await expect(page.locator("canvas").first()).toBeVisible();
+  const canvas = page.locator("canvas").first();
+  if (!(await canvas.isVisible().catch(() => false))) {
+    const addPage = page.getByRole("button", { name: /Add page|Aggiungi pagina/i }).first();
+    await expect(addPage).toBeVisible();
+    await addPage.click();
+  }
+  await expect(canvas).toBeVisible();
   await page.waitForTimeout(700);
 }
 
