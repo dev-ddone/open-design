@@ -31,14 +31,12 @@ test("SVG export matches the normalized golden source @golden", async ({ page })
   await openFreshDesign(page);
   await openCommand(page, "Aggiungi titolo");
 
-  const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: /Export/ }).click();
   await page.getByRole("button", { name: "SVG · pagina corrente" }).click();
   const preflight = page.getByRole("dialog", { name: /Controllo prima dell.export/i });
-  if (await preflight.isVisible().catch(() => false)) {
-    const override = preflight.getByRole("button", { name: /Esporta comunque|Conferma export/ });
-    await override.click();
-  }
+  await expect(preflight).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await preflight.getByRole("button", { name: /Esporta comunque|Conferma export/ }).click();
   const download = await downloadPromise;
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
