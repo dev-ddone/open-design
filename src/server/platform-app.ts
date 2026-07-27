@@ -7,10 +7,12 @@ import elementsLocalization from "./elements-localization.js";
 import elementPreferences from "./element-preferences.js";
 import designReviews from "./design-reviews.js";
 import pageOrder from "./page-order.js";
+import studioPlatform from "./studio-platform.js";
 import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
 import elementsCatalogV2 from "./elements-catalog-v2.js";
 import elementsUniverse from "./elements-universe.js";
+import { improveElementsSearch } from "./elements-search-ux.js";
 import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
 import advanced from "./advanced.js";
@@ -36,6 +38,10 @@ app.use("/api/elements-universe/*", async (c, next) => {
   }
 });
 
+// Keep local provider filtering and load-more pagination honest before the
+// strict catalog response reaches the editor.
+app.use("/api/elements-universe/search", improveElementsSearch);
+
 // Password-reset requests never disclose whether an account exists.
 app.route("/", passwordRecovery);
 // Existing members keep their current client permissions when accepting another invitation.
@@ -50,6 +56,8 @@ app.route("/", elementPreferences);
 app.route("/", designReviews);
 // Page ordering validates the complete page set and persists atomically.
 app.route("/", pageOrder);
+// Governance, notifications and declarative plugins share the same tenancy model.
+app.route("/", studioPlatform);
 // Stable asset URLs can be rendered by Fabric/Image using the session cookie alone.
 app.route("/", assetContent);
 // Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
