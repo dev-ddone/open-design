@@ -23,6 +23,21 @@ import { validateSvgBytes } from "./svg-security.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 
+function normalizeRasterRoute(appLike: unknown, prefix: string): void {
+  const routes = (appLike as { routes?: Array<{ path: string }> }).routes ?? [];
+  const legacyPath = `${prefix}/:id.png`;
+  const correctedPath = `${prefix}/:id{[^.]+}.png`;
+  for (const route of routes) {
+    if (route.path === legacyPath) route.path = correctedPath;
+  }
+}
+
+// Hono requires an explicit parameter expression when a dynamic segment has
+// a static file extension. Patch the two bundled raster sub-apps before their
+// routes are copied into the platform router, preserving the public URLs.
+normalizeRasterRoute(studioRasterPack, "/api/studio-raster");
+normalizeRasterRoute(studioRasterPackExtra, "/api/studio-raster-extra");
+
 app.use("/api/elements-universe/*", async (c, next) => {
   await next();
   const contentType = c.res.headers.get("content-type") ?? "";
