@@ -6,6 +6,7 @@ if (!cookiesPath || !loginPath) throw new Error("Usage: node scripts/element-pre
 const cookieFile = await fs.readFile(cookiesPath, "utf8");
 const cookie = cookieFile
   .split(/\r?\n/)
+  .map((line) => line.startsWith("#HttpOnly_") ? line.slice("#HttpOnly_".length) : line)
   .filter((line) => line && !line.startsWith("#"))
   .map((line) => line.split("\t"))
   .filter((parts) => parts.length >= 7)
