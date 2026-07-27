@@ -18,6 +18,35 @@ test("command palette opens page overview and asset library", async ({ page }) =
   await page.keyboard.press("Escape");
 });
 
+test("web library exposes curated pizza and ornamental searches", async ({ page }) => {
+  await openFreshDesign(page);
+  await page.getByRole("button", { name: "Web", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Libreria web" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Pizze/ })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Cornici ornamentali/ })).toBeVisible();
+  await expect(dialog.getByPlaceholder(/Pizza, cornice barocca/)).toBeVisible();
+});
+
+test("gradient and dissolve tools expose editable nodes", async ({ page }) => {
+  await openFreshDesign(page);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("ddone:open-tool", { detail: { tool: "gradient" } })));
+  const gradient = page.getByRole("dialog", { name: "Gradiente avanzato" });
+  await expect(gradient).toBeVisible();
+  await expect(gradient.getByText(/Doppio clic sulla barra/)).toBeVisible();
+  await expect(gradient.getByText("Nodo selezionato")).toBeVisible();
+  await gradient.getByRole("button", { name: "Aggiungi nodo" }).click();
+  await expect(gradient.getByTitle(/%/).first()).toBeVisible();
+  await gradient.getByRole("button", { name: /close|chiudi/i }).click().catch(async () => page.keyboard.press("Escape"));
+
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("ddone:open-tool", { detail: { tool: "dissolve" } })));
+  const dissolve = page.getByRole("dialog", { name: "Dissolvenza avanzata" });
+  await expect(dissolve).toBeVisible();
+  await expect(dissolve.getByText("Nodi alpha")).toBeVisible();
+  await expect(dissolve.getByText("Inizio dissolvenza")).toBeVisible();
+  await expect(dissolve.getByText("Fine dissolvenza")).toBeVisible();
+});
+
 test("style recipes apply to a selected object", async ({ page }) => {
   await openFreshDesign(page);
   await openCommand(page, "Aggiungi rettangolo");
