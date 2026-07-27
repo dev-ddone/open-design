@@ -44,19 +44,22 @@ export function RightPanel() {
             ? <DesignAuditPanel />
             : <TemplateDataPanel />;
 
-  const buttonClass = (value: RightPanelTab) => `grid h-7 w-8 place-items-center rounded-md border-0 cursor-pointer ${tab === value ? "bg-violet-600 text-white" : "bg-transparent text-zinc-400 hover:bg-zinc-100"}`;
+  const buttonClass = (value: RightPanelTab) => `grid h-8 w-8 place-items-center rounded-lg border-0 cursor-pointer ${tab === value ? "bg-violet-600 text-white shadow-sm" : "bg-transparent text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"}`;
 
   return (
-    <div class="relative flex h-full shrink-0 flex-col">
-      <div class="absolute right-3 top-2 z-20 flex rounded-lg border border-zinc-200 bg-white p-0.5 shadow-sm">
-        {!readOnly && <button aria-label="Proprietà" title="Proprietà" onClick={() => setTab("properties")} class={buttonClass("properties")}><SlidersHorizontal size={13} /></button>}
-        {!readOnly && <button aria-label="Livelli" title="Livelli" onClick={() => setTab("layers")} class={buttonClass("layers")}><Layers3 size={13} /></button>}
-        {!readOnly && <button aria-label="Smart Resize" title="Smart Resize" onClick={() => setTab("resize")} class={buttonClass("resize")}><Maximize2 size={13} /></button>}
-        {!readOnly && <button aria-label="Controllo design" title="Controllo design" onClick={() => setTab("audit")} class={buttonClass("audit")}><BadgeCheck size={13} /></button>}
-        <button aria-label="Commenti e approvazione" title="Commenti e approvazione" onClick={() => setTab("review")} class={buttonClass("review")}><MessageSquareCheck size={13} /></button>
-        {!readOnly && <button aria-label="Template e dati CSV" title="Template e dati CSV" onClick={() => setTab("data")} class={buttonClass("data")}><Database size={13} /></button>}
+    <div class="flex h-full w-[280px] shrink-0 flex-col border-l border-zinc-200 bg-white">
+      <div class="flex min-h-11 shrink-0 items-center justify-between border-b border-zinc-200 px-3">
+        <div><strong class="block text-[9px] font-semibold text-zinc-600">Pannello</strong><span class="block text-[7px] text-zinc-400">Proprietà, livelli e revisione</span></div>
+        <div class="flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
+          {!readOnly && <button aria-label="Proprietà" title="Proprietà" onClick={() => setTab("properties")} class={buttonClass("properties")}><SlidersHorizontal size={13} /></button>}
+          {!readOnly && <button aria-label="Livelli" title="Livelli" onClick={() => setTab("layers")} class={buttonClass("layers")}><Layers3 size={13} /></button>}
+          {!readOnly && <button aria-label="Smart Resize" title="Smart Resize" onClick={() => setTab("resize")} class={buttonClass("resize")}><Maximize2 size={13} /></button>}
+          {!readOnly && <button aria-label="Controllo design" title="Controllo design" onClick={() => setTab("audit")} class={buttonClass("audit")}><BadgeCheck size={13} /></button>}
+          <button aria-label="Commenti e approvazione" title="Commenti e approvazione" onClick={() => setTab("review")} class={buttonClass("review")}><MessageSquareCheck size={13} /></button>
+          {!readOnly && <button aria-label="Template e dati CSV" title="Template e dati CSV" onClick={() => setTab("data")} class={buttonClass("data")}><Database size={13} /></button>}
+        </div>
       </div>
-      {content}
+      <div class="min-h-0 flex-1 overflow-hidden">{content}</div>
     </div>
   );
 }
