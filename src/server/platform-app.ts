@@ -23,20 +23,53 @@ import { validateSvgBytes } from "./svg-security.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
 
-function normalizeRasterRoute(appLike: unknown, prefix: string): void {
-  const routes = (appLike as { routes?: Array<{ path: string }> }).routes ?? [];
-  const legacyPath = `${prefix}/:id.png`;
-  const correctedPath = `${prefix}/:id{[^.]+}.png`;
-  for (const route of routes) {
-    if (route.path === legacyPath) route.path = correctedPath;
-  }
+type InternalRoute = {
+  method: string;
+  path: string;
+  handler: (context: unknown, next: () => Promise<void>) => unknown;
+};
+
+function addRasterCompatibilityRoute(subApp: Hono<any>, prefix: string): void {
+  const routes = (subApp as unknown as { routes?: InternalRoute[] }).routes ?? [];
+  const legacy = routes.find((route) => route.method === "GET" && route.path === `${prefix}/:id.png`);
+  if (!legacy) throw new Error(`Missing bundled raster renderer for ${prefix}`);
+
+  subApp.get(`${prefix}/:filename`, async (c) => {
+    const filename = c.req.param("filename");
+    if (!/^[a-z0-9-]+\.png$/i.test(filename)) return c.json({ error: "Raster asset not found" }, 404);
+    const id = filename.slice(0, -4);
+
+    const requestProxy = new Proxy(c.req as object, {
+      get(target, property, receiver) {
+        if (property === "param") {
+          return (name?: string) => {
+            if (name === "id") return id;
+            if (name === "filename") return filename;
+            return (c.req.param as (name?: string) => unknown)(name);
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const contextProxy = new Proxy(c as object, {
+      get(target, property, receiver) {
+        if (property === "req") return requestProxy;
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const response = await legacy.handler(contextProxy, async () => undefined);
+    return response instanceof Response ? response : c.notFound();
+  });
 }
 
-// Hono requires an explicit parameter expression when a dynamic segment has
-// a static file extension. Patch the two bundled raster sub-apps before their
-// routes are copied into the platform router, preserving the public URLs.
-normalizeRasterRoute(studioRasterPack, "/api/studio-raster");
-normalizeRasterRoute(studioRasterPackExtra, "/api/studio-raster-extra");
+// Hono 4 does not treat `:id.png` as a parameter followed by a static suffix.
+// Add an explicit filename route and delegate to each pack's existing renderer.
+addRasterCompatibilityRoute(studioRasterPack, "/api/studio-raster");
+addRasterCompatibilityRoute(studioRasterPackExtra, "/api/studio-raster-extra");
 
 app.use("/api/elements-universe/*", async (c, next) => {
   await next();
