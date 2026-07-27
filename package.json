@@ -1,6 +1,6 @@
 {
   "name": "@ddone/open-design",
-  "version": "2.10.0-alpha.1",
+  "version": "3.0.0-alpha.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.5",
@@ -15,7 +15,10 @@
     "start": "tsx src/server/dev.ts",
     "db:migrate": "tsx src/server/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test scripts/*.test.ts",
+    "test": "node --import tsx --test scripts/*.test.ts src/**/*.test.ts",
+    "test:e2e": "playwright test --grep-invert @visual",
+    "test:visual": "playwright test --grep @visual",
+    "test:update-snapshots": "playwright test --update-snapshots",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
@@ -30,6 +33,7 @@
     "hono": "^4.12.10",
     "jose": "^6.2.3",
     "jspdf": "^3.0.3",
+    "jszip": "3.10.1",
     "lib0": "^0.2.58",
     "lucide-preact": "^0.575.0",
     "nodemailer": "^7.0.5",
@@ -39,6 +43,7 @@
     "tailwindcss": "^4.2.2",
     "webfontloader": "^1.6.28",
     "ws": "^8.18.3",
+    "xlsx": "0.18.5",
     "y-protocols": "^1.0.5",
     "y-websocket": "2.1.0",
     "yjs": "^13.6.27",
@@ -46,6 +51,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@preact/preset-vite": "^2.9.0",
     "@types/node": "^22.15.0",
     "@types/nodemailer": "^7.0.1",
