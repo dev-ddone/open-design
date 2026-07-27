@@ -8,6 +8,7 @@ import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
 import elementsCatalogV2 from "./elements-catalog-v2.js";
 import elementsUniverse from "./elements-universe.js";
+import { improveElementsSearch } from "./elements-search-ux.js";
 import guards from "./legacy-guards.js";
 import hardening from "./hardening.js";
 import advanced from "./advanced.js";
@@ -32,6 +33,10 @@ app.use("/api/elements-universe/*", async (c, next) => {
     );
   }
 });
+
+// Keep local provider filtering and load-more pagination honest before the
+// strict catalog response reaches the editor.
+app.use("/api/elements-universe/search", improveElementsSearch);
 
 // Password-reset requests never disclose whether an account exists.
 app.route("/", passwordRecovery);
