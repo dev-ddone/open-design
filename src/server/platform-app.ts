@@ -5,6 +5,7 @@ import invitationAcceptance from "./invitation-acceptance.js";
 import templateApplication from "./template-application.js";
 import elementsLocalization from "./elements-localization.js";
 import elementPreferences from "./element-preferences.js";
+import designReviews from "./design-reviews.js";
 import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
 import elementsCatalogV2 from "./elements-catalog-v2.js";
@@ -44,6 +45,8 @@ app.route("/", templateApplication);
 app.route("/", elementsLocalization);
 // Favorites, recents and collections follow the signed-in user across devices.
 app.route("/", elementPreferences);
+// Comments and approval states are scoped to accessible designs.
+app.route("/", designReviews);
 // Stable asset URLs can be rendered by Fabric/Image using the session cookie alone.
 app.route("/", assetContent);
 // Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
