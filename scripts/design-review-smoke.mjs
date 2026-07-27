@@ -27,11 +27,18 @@ const endpoint = `http://127.0.0.1:3006/api/designs/${design.id}`;
 const create = await fetch(`${endpoint}/comments`, {
   method: "POST",
   headers,
-  body: JSON.stringify({ body: "Increase the title contrast", objectId: "smoke-title" }),
+  body: JSON.stringify({
+    body: "@reviewer increase the title contrast",
+    objectId: "smoke-title",
+    anchorX: 0.25,
+    anchorY: 0.4,
+  }),
 });
 if (!create.ok) throw new Error(`Comment create failed: ${create.status} ${await create.text()}`);
 const comment = await create.json();
 if (!comment.id) throw new Error("Comment id missing");
+if (comment.anchor_x !== 0.25 || comment.anchor_y !== 0.4) throw new Error("Comment anchor missing");
+if (!comment.mentions?.includes("reviewer")) throw new Error("Comment mention missing");
 
 const requestReview = await fetch(`${endpoint}/review`, {
   method: "PUT",
@@ -47,12 +54,19 @@ const approve = await fetch(`${endpoint}/review`, {
 });
 if (!approve.ok) throw new Error(`Approval failed: ${approve.status} ${await approve.text()}`);
 
-const resolve = await fetch(`${endpoint}/comments/${comment.id}`, { method: "PATCH", headers, body: "{}" });
+const resolve = await fetch(`${endpoint}/comments/${comment.id}`, {
+  method: "PATCH",
+  headers,
+  body: JSON.stringify({ resolved: true, anchorX: 0.3, anchorY: 0.45 }),
+});
 if (!resolve.ok) throw new Error(`Comment resolve failed: ${resolve.status} ${await resolve.text()}`);
 
 const read = await fetch(`${endpoint}/review`, { headers });
 if (!read.ok) throw new Error(`Review read failed: ${read.status} ${await read.text()}`);
 const result = await read.json();
 if (result.review?.status !== "APPROVED") throw new Error("Review status did not persist");
-if (!result.comments?.find((item) => item.id === comment.id && item.resolved_at)) throw new Error("Resolved comment did not persist");
-console.log("Design comments, resolution and approval workflow verified.");
+const persisted = result.comments?.find((item) => item.id === comment.id);
+if (!persisted?.resolved_at) throw new Error("Resolved comment did not persist");
+if (persisted.anchor_x !== 0.3 || persisted.anchor_y !== 0.45) throw new Error("Moved comment anchor did not persist");
+if (!persisted.mentions?.includes("reviewer")) throw new Error("Comment mentions did not persist");
+console.log("Anchored comments, mentions, resolution and approval workflow verified.");
