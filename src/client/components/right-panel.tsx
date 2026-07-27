@@ -1,12 +1,13 @@
 import { useEffect, useState } from "preact/hooks";
-import { BadgeCheck, Layers3, Maximize2, MessageSquareCheck, SlidersHorizontal } from "lucide-preact";
+import { BadgeCheck, Database, Layers3, Maximize2, MessageSquareCheck, SlidersHorizontal } from "lucide-preact";
 import { DesignAuditPanel } from "./design-audit-panel";
 import { LayersPanel } from "./layers-panel";
 import { ReviewPanel } from "./review-panel";
 import { RightSidebar } from "./right-sidebar";
 import { SmartResizePanel } from "./smart-resize-panel";
+import { TemplateDataPanel } from "./template-data-panel";
 
-type RightPanelTab = "properties" | "layers" | "resize" | "audit" | "review";
+type RightPanelTab = "properties" | "layers" | "resize" | "audit" | "review" | "data";
 
 export function RightPanel() {
   const [tab, setTab] = useState<RightPanelTab>("properties");
@@ -14,7 +15,7 @@ export function RightPanel() {
   useEffect(() => {
     const open = (event: Event) => {
       const requested = (event as CustomEvent<{ tab?: RightPanelTab }>).detail?.tab;
-      if (["properties", "layers", "resize", "audit", "review"].includes(requested ?? "")) setTab(requested!);
+      if (["properties", "layers", "resize", "audit", "review", "data"].includes(requested ?? "")) setTab(requested!);
     };
     window.addEventListener("ddone:open-right-panel", open);
     return () => window.removeEventListener("ddone:open-right-panel", open);
@@ -28,7 +29,9 @@ export function RightPanel() {
         ? <SmartResizePanel />
         : tab === "audit"
           ? <DesignAuditPanel />
-          : <ReviewPanel />;
+          : tab === "review"
+            ? <ReviewPanel />
+            : <TemplateDataPanel />;
 
   return (
     <div class="relative flex h-full shrink-0 flex-col">
@@ -38,6 +41,7 @@ export function RightPanel() {
         <button title="Smart Resize" onClick={() => setTab("resize")} class={`grid h-7 w-8 place-items-center rounded-md border-0 cursor-pointer ${tab === "resize" ? "bg-violet-600 text-white" : "bg-transparent text-zinc-400 hover:bg-zinc-100"}`}><Maximize2 size={13} /></button>
         <button title="Controllo design" onClick={() => setTab("audit")} class={`grid h-7 w-8 place-items-center rounded-md border-0 cursor-pointer ${tab === "audit" ? "bg-violet-600 text-white" : "bg-transparent text-zinc-400 hover:bg-zinc-100"}`}><BadgeCheck size={13} /></button>
         <button title="Commenti e approvazione" onClick={() => setTab("review")} class={`grid h-7 w-8 place-items-center rounded-md border-0 cursor-pointer ${tab === "review" ? "bg-violet-600 text-white" : "bg-transparent text-zinc-400 hover:bg-zinc-100"}`}><MessageSquareCheck size={13} /></button>
+        <button title="Template e dati CSV" onClick={() => setTab("data")} class={`grid h-7 w-8 place-items-center rounded-md border-0 cursor-pointer ${tab === "data" ? "bg-violet-600 text-white" : "bg-transparent text-zinc-400 hover:bg-zinc-100"}`}><Database size={13} /></button>
       </div>
       {content}
     </div>
