@@ -14,7 +14,9 @@
     "build": "vite build",
     "start": "tsx src/server/dev.ts",
     "db:migrate": "tsx src/server/migrate.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1093.0",
