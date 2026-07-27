@@ -57,13 +57,13 @@ export function NotificationCenter() {
   };
 
   return (
-    <>
-      <button data-testid="notification-center-trigger" onClick={() => { setOpen((value) => !value); void load(); }} title="Notifiche" class="absolute right-[172px] top-2 z-[72] grid h-8 w-8 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm cursor-pointer hover:bg-zinc-50">
+    <div class="relative" data-testid="notification-center">
+      <button data-testid="notification-center-trigger" onClick={() => { setOpen((value) => !value); void load(); }} title="Notifiche" class="relative grid h-8 w-8 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm cursor-pointer hover:bg-zinc-50">
         <Bell size={14} />
         {unread > 0 && <span class="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-500 px-1 text-center text-[7px] font-bold leading-4 text-white">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && (
-        <div class="absolute right-4 top-12 z-[120] flex max-h-[70vh] w-[360px] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl">
+        <div class="absolute right-0 top-10 z-[120] flex max-h-[70vh] w-[360px] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl">
           <header class="flex items-center justify-between border-b border-zinc-200 px-4 py-3"><div><strong class="text-xs text-zinc-800">Notifiche</strong><span class="ml-2 text-[8px] text-zinc-400">{unread} non lette</span></div><div class="flex gap-1"><button title="Segna tutte come lette" disabled={unread === 0} onClick={() => void markAll()} class="grid h-8 w-8 place-items-center rounded-lg border-0 bg-transparent text-zinc-500 cursor-pointer disabled:opacity-30"><CheckCheck size={14} /></button><button onClick={() => setOpen(false)} class="grid h-8 w-8 place-items-center rounded-lg border-0 bg-transparent text-zinc-500 cursor-pointer"><X size={14} /></button></div></header>
           <div class="overflow-y-auto p-2">
             {items.map((item) => <button key={item.id} onClick={() => void markRead(item)} class={`mb-1 flex w-full gap-3 rounded-xl border-0 p-3 text-left cursor-pointer ${item.read_at ? "bg-white" : "bg-violet-50"}`}><span class={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${item.read_at ? "bg-zinc-100 text-zinc-500" : "bg-violet-600 text-white"}`}><MessageSquare size={13} /></span><span class="min-w-0"><strong class="block truncate text-[10px] text-zinc-800">{item.title}</strong><span class="mt-1 line-clamp-2 block text-[8px] leading-relaxed text-zinc-500">{item.body}</span><span class="mt-1 block text-[7px] text-zinc-400">{item.design_name ?? "Workspace"} · {new Date(item.created_at).toLocaleString("it-IT")}</span></span></button>)}
@@ -72,6 +72,6 @@ export function NotificationCenter() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
