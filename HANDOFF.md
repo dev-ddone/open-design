@@ -4,7 +4,7 @@
 
 `feat/ddone-smart-elements-editor`
 
-This branch is stacked on PR #4 and contains the most complete static-editor implementation. Continue from this branch until the stacked pull requests are consolidated.
+This branch is stacked on PR #4 and contains the most complete static-editor implementation. It must be rebased or consolidated with the current `feat/ddone-pro-elements-canvas-ux` head before merge because the stacked history has diverged.
 
 ## Product decision
 
@@ -12,7 +12,7 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 
 ## Current version
 
-`2.6.0-alpha.1`
+`2.8.0-alpha.1`
 
 ## What is implemented
 
@@ -28,15 +28,23 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 - layers, grouping, ordering, visibility, locking and keyboard controls;
 - SVG palette editing and image tools;
 - synchronized favorites, recent items and collection persistence;
-- static Smart Resize;
-- design audit for brand, layout, accessibility and attribution.
+- static Smart Resize and separate resized campaign designs;
+- Design Audit for brand, layout, accessibility, templates and attribution;
+- CSV/Markdown attribution reports;
+- design comments tied to page or object;
+- review states: draft, in review, changes requested and approved;
+- semantic template fields for text, price, CTA, image and logo;
+- required-field and duplicate-key validation;
+- CSV application to the current page;
+- CSV generation of up to 100 pages with a safety version.
 
 ## Database migrations
 
-Migrations run automatically at startup. New in this release:
+Migrations run automatically at startup. Relevant recent migrations:
 
 - `003_element_preferences.sql` creates user/organization preference storage;
-- `004_element_preference_items.sql` stores complete favorite cards for cross-device rendering.
+- `004_element_preference_items.sql` stores complete favorite cards for cross-device rendering;
+- `005_design_reviews.sql` adds review state and page/object comments.
 
 Existing PostgreSQL and MinIO volumes remain compatible. Back up both before staging deployment.
 
@@ -48,7 +56,7 @@ pnpm install --no-frozen-lockfile
 pnpm check
 ```
 
-The CI workflow additionally boots PostgreSQL, starts the production server, verifies authentication/client/design flows, tests Elements and realtime collaboration and builds the Docker image.
+The CI workflow additionally boots PostgreSQL, starts the production server, runs migrations, verifies authentication/client/design flows, tests Elements, realtime collaboration, preferences and the design-review workflow, then builds the production Docker image.
 
 ## Required staging acceptance
 
@@ -58,31 +66,40 @@ The CI workflow additionally boots PostgreSQL, starts the production server, ver
 4. Favorite an element, open another browser session and verify synchronization after reopening the Elements panel.
 5. Insert and edit a smart table and photo grid.
 6. Group objects, reorder layers and use keyboard movement.
-7. Run Smart Resize from square to story and A4 formats.
+7. Run Smart Resize and create a separate story/A4 campaign variant.
 8. Apply a brand kit and run Controllo design.
-9. Export PNG, SVG and multipage PDF and compare visually.
-10. Edit simultaneously from two browsers and test reconnect.
+9. Export CSV and Markdown attribution reports.
+10. Mark text, price and image objects as semantic template fields.
+11. Import a CSV, apply one record and generate multiple pages.
+12. Add an object comment, resolve it, request review and approve the design.
+13. Export PNG, SVG and multipage PDF and compare visually.
+14. Edit simultaneously from two browsers and test reconnect.
 
 ## Known limitations
 
-- Smart Resize transforms the current page; linked campaign variants and automatic content reflow are not yet implemented.
-- The design audit reports issues but does not yet block export or automatically repair them.
+- Smart Resize uses geometric scaling and relative placement; it does not perform AI or constraint-based semantic reflow.
+- Resized campaign designs and CSV-generated pages are independent after creation, not live-linked variants.
+- The audit reports issues but does not yet block export or automatically repair them.
+- Review approval does not yet enforce an export gate.
+- Comments do not yet render as canvas pins and mentions/email notifications are not delivered.
 - Preference synchronization uses the existing local-first Elements UI; remote changes appear when the panel is reopened or the editor is reloaded.
-- Named collections are persisted, but a complete collection-management UI is still pending.
-- Template placeholders are still object-ID policies rather than semantic fields.
-- Comments, approvals and reviewer workflows are not yet implemented.
-- Data-bound charts/tables, CSV bulk generation and batch export remain pending.
+- Named collections are persisted, but complete collection-management UI remains pending.
+- CSV is supported; native XLSX parsing remains pending.
+- Semantic image fields accept a resolvable URL; an integrated asset-picker replacement flow remains pending.
+- Rich data-bound charts and tables are not live-linked to spreadsheet data.
 - Browser E2E, visual regression and export golden-file coverage remain incomplete.
 - Remote cursor and offline/reconnect behavior require broader acceptance coverage.
+- The stacked PR history is not currently mergeable without consolidation.
 
 ## Next implementation order
 
-1. semantic template placeholders and image replacement;
-2. comments, mentions and approval workflow;
-3. CSV/XLSX bulk creation and data-bound components;
-4. Playwright plus visual/export regression tests;
-5. export attribution report and optional export blocking on audit errors;
-6. linked campaign variants built on top of Smart Resize.
+1. consolidate PR #5 with the current PR #4 head;
+2. Playwright editor journeys and screenshot/export visual regression;
+3. native XLSX import and data-bound smart tables/charts;
+4. approval and audit export gates;
+5. object comment pins, mentions and notifications;
+6. production-grade remote cursors and reconnect tests;
+7. plugin/extension SDK and public integration contracts.
 
 ## Release documentation
 
