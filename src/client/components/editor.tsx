@@ -16,21 +16,25 @@ import { CollaborationStatusBanner } from "./collaboration-status-banner";
 import { PluginManager } from "./plugin-manager";
 import { StyleRecipesPanel } from "./style-recipes-panel";
 import { StyleRecipesLauncher } from "./style-recipes-launcher";
+import { SmartPlacementGuard } from "./smart-placement-guard";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
   useEditorShortcuts();
   return (
-    <div class="relative flex h-full w-full flex-col">
+    <div class="relative flex h-full w-full flex-col overflow-hidden">
       <ElementPreferencesSync />
+      <SmartPlacementGuard />
       <Toolbar />
-      <NotificationCenter />
-      <StyleRecipesLauncher />
+      <div class="absolute right-3 top-2 z-[72] flex items-center gap-2" data-testid="editor-utility-dock">
+        <StyleRecipesLauncher />
+        <NotificationCenter />
+      </div>
       <CollaborationStatusBanner />
       <SelectionToolbar />
-      <div class="flex flex-1 min-h-0">
+      <div class="flex flex-1 min-h-0 overflow-hidden">
         <LeftSidebar />
-        <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
           <CanvasArea />
           <PagesBar />
         </div>
