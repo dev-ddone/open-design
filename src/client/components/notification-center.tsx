@@ -58,7 +58,7 @@ export function NotificationCenter() {
 
   return (
     <>
-      <button onClick={() => { setOpen((value) => !value); void load(); }} title="Notifiche" class="absolute right-[172px] top-2 z-[72] grid h-8 w-8 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm cursor-pointer hover:bg-zinc-50">
+      <button data-testid="notification-center-trigger" onClick={() => { setOpen((value) => !value); void load(); }} title="Notifiche" class="absolute right-[172px] top-2 z-[72] grid h-8 w-8 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm cursor-pointer hover:bg-zinc-50">
         <Bell size={14} />
         {unread > 0 && <span class="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-500 px-1 text-center text-[7px] font-bold leading-4 text-white">{unread > 99 ? "99+" : unread}</span>}
       </button>
