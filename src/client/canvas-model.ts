@@ -2,13 +2,14 @@ import type * as fabric from "fabric";
 import type { TemplateEditRules } from "./types";
 
 export const EXTRA_OBJECT_PROPERTIES = [
-  "ddoneId", "ddoneName", "templateLocked", "templateEditable", "_isBgImage",
+  "ddoneId", "ddoneName", "templateLocked", "templateEditable", "_isBgImage", "_isBgGradient",
   "ddoneSourceId", "ddoneProvider", "ddoneSourceUrl", "ddoneLicense", "ddoneLicenseUrl",
   "ddoneAuthor", "ddoneAttribution", "ddoneAttributionRequired", "ddoneIsSvg", "ddoneMediaKind",
   "ddoneFormat", "ddoneTransparent", "ddoneEffect", "ddoneMediaUrl", "ddonePosterUrl",
   "ddoneSmartType", "ddoneSmartVariant", "ddoneSmartData", "ddoneVectorPalette",
-  "ddoneVectorOriginalPalette", "ddoneEffectConfig", "ddoneEffectSourceId", "ddoneFieldKey",
-  "ddoneFieldLabel", "ddoneFieldType", "ddoneFieldRequired", "ddoneFieldDefault",
+  "ddoneVectorOriginalPalette", "ddoneEffectConfig", "ddoneEffectSourceId", "ddoneGradientConfig",
+  "ddoneDissolveConfig", "ddoneFieldKey", "ddoneFieldLabel", "ddoneFieldType", "ddoneFieldRequired",
+  "ddoneFieldDefault",
 ] as const;
 
 export type DDoneTemplateFieldType = "text" | "price" | "cta" | "image" | "logo";
@@ -20,6 +21,7 @@ export type DDoneFabricObject = fabric.FabricObject & {
   templateLocked?: boolean;
   templateEditable?: boolean;
   _isBgImage?: boolean;
+  _isBgGradient?: boolean;
   ddoneSourceId?: string;
   ddoneProvider?: string;
   ddoneSourceUrl?: string;
@@ -42,6 +44,8 @@ export type DDoneFabricObject = fabric.FabricObject & {
   ddoneVectorOriginalPalette?: string[];
   ddoneEffectConfig?: string;
   ddoneEffectSourceId?: string;
+  ddoneGradientConfig?: string;
+  ddoneDissolveConfig?: string;
   ddoneFieldKey?: string;
   ddoneFieldLabel?: string;
   ddoneFieldType?: DDoneTemplateFieldType;
@@ -70,7 +74,7 @@ export function normalizeEditRules(value: TemplateEditRules | null | undefined):
 export function isObjectEditable(object: fabric.FabricObject, rulesValue: TemplateEditRules | null | undefined): boolean {
   const rules = normalizeEditRules(rulesValue);
   const target = object as DDoneFabricObject;
-  if (target._isBgImage) return false;
+  if (target._isBgImage || target._isBgGradient) return false;
   if (rules.mode === "unlocked") return true;
   const id = ensureObjectId(object);
   if (rules.lockedObjectIds.includes(id) || target.templateLocked) return false;
@@ -96,7 +100,7 @@ export function rulesFromCanvas(canvas: fabric.Canvas, mode: TemplateEditRules["
     const target = object as DDoneFabricObject;
     const id = ensureObjectId(object);
     if (target.templateEditable) editableObjectIds.push(id);
-    if (target.templateLocked || target._isBgImage) lockedObjectIds.push(id);
+    if (target.templateLocked || target._isBgImage || target._isBgGradient) lockedObjectIds.push(id);
   }
   return { mode, editableObjectIds, lockedObjectIds };
 }
