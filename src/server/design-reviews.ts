@@ -7,17 +7,35 @@ import { one, query } from "./db.js";
 
 const reviews = new Hono<{ Variables: AppVariables }>();
 
+const anchorValue = z.number().finite().min(0).max(1).nullable();
 const commentPayload = z.object({
   body: z.string().trim().min(1).max(4_000),
   pageId: z.string().uuid().nullable().optional(),
   objectId: z.string().trim().min(1).max(500).nullable().optional(),
   parentId: z.string().uuid().nullable().optional(),
+  anchorX: anchorValue.optional(),
+  anchorY: anchorValue.optional(),
+});
+const commentUpdatePayload = z.object({
+  resolved: z.boolean().optional(),
+  anchorX: anchorValue.optional(),
+  anchorY: anchorValue.optional(),
 });
 
 const reviewPayload = z.object({
   status: z.enum(["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED"]),
   note: z.string().trim().max(4_000).nullable().optional(),
 });
+
+function extractMentions(body: string): string[] {
+  const mentions = new Set<string>();
+  const expression = /(^|\s)@([a-z0-9._-]+(?:@[a-z0-9.-]+)?)/gi;
+  for (const match of body.matchAll(expression)) {
+    const value = match[2]?.trim().toLowerCase();
+    if (value) mentions.add(value);
+  }
+  return [...mentions].slice(0, 25);
+}
 
 async function requireDesignAccess(c: any, designId: string): Promise<{ id: string; client_id: string | null }> {
   const organizationId = c.get("organizationId") as string;
@@ -52,6 +70,7 @@ reviews.get("/api/designs/:designId/review", requireAuth, requireOrganization, a
   );
   const comments = await query<any>(
     `SELECT dc.id,dc.design_id,dc.page_id,dc.object_id,dc.parent_id,dc.body,
+            dc.anchor_x,dc.anchor_y,dc.mentions,
             dc.resolved_at,dc.created_at,dc.updated_at,
             author.id AS author_id,author.name AS author_name,author.email AS author_email,
             resolver.name AS resolved_by_name
@@ -93,10 +112,12 @@ reviews.post("/api/designs/:designId/comments", requireAuth, requireOrganization
     if (!parent) throw new HTTPException(400, { message: "Parent comment does not belong to design" });
   }
 
+  const mentions = extractMentions(parsed.data.body);
   const created = await one<any>(
-    `INSERT INTO design_comments(design_id,page_id,object_id,parent_id,author_id,body)
-     VALUES ($1,$2,$3,$4,$5,$6)
-     RETURNING id,design_id,page_id,object_id,parent_id,body,resolved_at,created_at,updated_at`,
+    `INSERT INTO design_comments(
+       design_id,page_id,object_id,parent_id,author_id,body,anchor_x,anchor_y,mentions
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
+     RETURNING id,design_id,page_id,object_id,parent_id,body,anchor_x,anchor_y,mentions,resolved_at,created_at,updated_at`,
     [
       designId,
       parsed.data.pageId ?? null,
@@ -104,6 +125,9 @@ reviews.post("/api/designs/:designId/comments", requireAuth, requireOrganization
       parsed.data.parentId ?? null,
       c.get("user").id,
       parsed.data.body,
+      parsed.data.anchorX ?? null,
+      parsed.data.anchorY ?? null,
+      JSON.stringify(mentions),
     ],
   );
   return c.json({ ...created, author_id: c.get("user").id, author_name: c.get("user").name }, 201);
@@ -112,23 +136,39 @@ reviews.post("/api/designs/:designId/comments", requireAuth, requireOrganization
 reviews.patch("/api/designs/:designId/comments/:commentId", requireAuth, requireOrganization, async (c) => {
   const designId = c.req.param("designId");
   await requireDesignAccess(c, designId);
+  const parsed = commentUpdatePayload.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.issues.map((issue) => issue.message).join(", ") });
+
   const comment = await one<{ id: string; author_id: string; resolved_at: string | null }>(
     "SELECT id,author_id,resolved_at FROM design_comments WHERE id=$1 AND design_id=$2",
     [c.req.param("commentId"), designId],
   );
   if (!comment) throw new HTTPException(404, { message: "Comment not found" });
-  const canResolve = comment.author_id === c.get("user").id || roleAtLeast(c.get("role"), "EDITOR");
-  if (!canResolve) throw new HTTPException(403, { message: "Insufficient permission to resolve comment" });
+  const canUpdate = comment.author_id === c.get("user").id || roleAtLeast(c.get("role"), "EDITOR");
+  if (!canUpdate) throw new HTTPException(403, { message: "Insufficient permission to update comment" });
 
-  const resolved = !comment.resolved_at;
+  const resolved = parsed.data.resolved ?? !comment.resolved_at;
+  const hasAnchorX = parsed.data.anchorX !== undefined;
+  const hasAnchorY = parsed.data.anchorY !== undefined;
   const updated = await one<any>(
     `UPDATE design_comments
         SET resolved_at=CASE WHEN $3 THEN now() ELSE NULL END,
             resolved_by=CASE WHEN $3 THEN $4::uuid ELSE NULL END,
+            anchor_x=CASE WHEN $5 THEN $6::double precision ELSE anchor_x END,
+            anchor_y=CASE WHEN $7 THEN $8::double precision ELSE anchor_y END,
             updated_at=now()
       WHERE id=$1 AND design_id=$2
-      RETURNING id,resolved_at,updated_at`,
-    [comment.id, designId, resolved, c.get("user").id],
+      RETURNING id,anchor_x,anchor_y,resolved_at,updated_at`,
+    [
+      comment.id,
+      designId,
+      resolved,
+      c.get("user").id,
+      hasAnchorX,
+      parsed.data.anchorX ?? null,
+      hasAnchorY,
+      parsed.data.anchorY ?? null,
+    ],
   );
   return c.json(updated);
 });
