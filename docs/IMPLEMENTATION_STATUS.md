@@ -1,239 +1,179 @@
-# Implementation status
+# Studio 3 implementation status
 
-This document describes `feat/ddone-smart-elements-editor` at version `2.10.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
+This document describes `feat/ddone-studio-3` at `3.0.0-alpha.1`. It separates implemented product workflows from wider production-readiness and ecosystem work.
 
 ## Status levels
 
-- **Verified** — covered by automated checks or a repeatable runtime smoke test.
-- **Usable** — connected to UI and backend, but still needs broader production use.
-- **Partial** — foundations exist, but the workflow does not yet meet the complete product promise.
-- **Planned** — not available and must not be marketed as implemented.
-- **Out of scope** — intentionally excluded from the product.
+- **Verified** — exercised by unit tests, runtime smoke tests, Playwright or a deterministic golden check.
+- **Usable** — connected to the product UI and persistence layer, but still needs broader production use.
+- **Partial** — the workflow exists, but the full market-level promise remains broader.
+- **Out of scope** — intentionally excluded from this static-design product.
 
 ## Product maturity
 
-DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations, multi-format campaign creation, contextual review, governed export and multipage document navigation. It is not yet a complete Canva replacement.
+DDone Design Studio 3 is a self-hosted static-design workspace for agencies, organizations and client-separated production. It is not a complete Canva replacement. Its strongest workflows are structured design editing, semantic templates, spreadsheet-driven production, governed review/export, multi-page campaigns, private assets and realtime collaboration.
 
-## Verified
+## Verified Studio 3 workflows
 
-### Runtime and deployment
+### Data production
 
-- Node.js/Hono production runtime.
-- PostgreSQL pool and ordered SQL migrations.
-- Local and S3-compatible/MinIO storage.
-- Docker and Coolify deployment paths.
-- Health check, authentication bootstrap and API smoke tests.
+- CSV, XLSX, XLS, XLSM and ODS import.
+- Workbook and sheet selection.
+- Tabular preview before applying data.
+- Automatic and manual column-to-semantic-field mapping.
+- Required-field completeness checks.
+- Apply one record to the current page.
+- Generate up to 250 static pages with a safety version.
 
-### Identity and permissions
+### Batch export
 
-- Registration, login and logout.
-- Signed HTTP-only session cookies.
-- Multiple organizations per user.
-- OWNER, ADMIN, EDITOR and VIEWER roles.
-- Organization and client scoping enforced by server routes.
+- ZIP export across one or more designs/campaigns.
+- PNG, JPG, SVG and Fabric JSON outputs.
+- Per-project folders, ordered page filenames and `manifest.json`.
+- Configurable raster scale, progress reporting and a 2,000-file safety limit.
 
-### Static Elements reliability
+### Governance and approval
 
-- DDone Structures, Tabler Icons and Twemoji are bundled.
-- Provider, source, author, license and attribution metadata are retained.
-- Unsafe SVG responses are rejected before reaching Fabric.
-- Local provider filtering and pagination regressions have automated coverage.
-- User/organization preference storage supports favorite IDs, complete favorite cards, recent items and named collections.
+- Persistent review states: draft, in review, changes requested and approved.
+- Persistent governance events for review decisions, export overrides, brand migrations, batch exports and plugin actions.
+- Export preflight connected to Design Audit, review state and unresolved comments.
+- Viewer/read-only users cannot bypass blockers.
 
-### Review workflow
+### Review and notifications
 
-- Persistent design review state.
-- Comments attached to design, page or object.
-- Normalized page-comment coordinates.
-- Object-linked canvas pins.
-- Mention metadata extraction and persistence.
-- Comment resolution and reopening.
-- Draft, in-review, changes-requested and approved transitions.
-- Runtime smoke coverage for comment anchors, anchor movement, mentions, resolution and approval persistence.
+- Point pins and rectangular comment regions.
+- Pins can be dragged and their normalized page coordinates persist.
+- Object-linked pins follow Fabric objects.
+- Comment replies, resolution/reopening and reviewer assignment.
+- Mentions resolve against workspace members.
+- Persistent in-app notifications with unread state.
+- Email delivery through the configured workspace mail transport.
 
-### Export governance
+### Page organization
 
-- Export preflight rules have unit coverage.
-- Audit errors and `CHANGES_REQUESTED` are treated as blockers.
-- Draft/in-review status, audit warnings and open comments are surfaced as notices.
-- Viewer/read-only sessions cannot bypass blockers.
-- Editor overrides are explicit.
-- Clean approved documents export without an extra confirmation dialog.
+- Searchable full-screen page overview.
+- Desktop drag-and-drop ordering.
+- Keyboard ordering with `Alt` + arrow keys.
+- Touch-friendly previous/next ordering controls.
+- Atomic server persistence with complete-page validation and stale-list conflict protection.
 
-### Page ordering
+### Assets and brand
 
-- Complete-page order validation is enforced server-side.
-- Reorders are written atomically.
-- Incomplete or stale page lists return a conflict instead of dropping pages.
-- Runtime smoke coverage creates, reverses, reloads and verifies page order.
+- Unified asset picker for insertion, replacement, semantic image fields and logos.
+- Private uploads plus configured open-content providers.
+- DDone PNG Studio with more than 45 bundled raster graphics, mockups, overlays, shadows, textures and backgrounds.
+- One-click document-wide brand migration.
+- Migration preview for colors, fonts, logos and structured smart elements.
+- Automatic safety version and persistent migration event.
 
-### Data and template utilities
+### Smart elements and styling
 
-- Semantic field metadata is serialized with Fabric objects.
-- CSV parser supports quoted fields and comma/semicolon detection.
-- Serialized data merge has unit coverage for text, image and nested group fields.
-- Design Audit detects missing required fields and duplicate field keys.
+- Structured smart tables, grids and frames.
+- Structured charts with editable labels, numeric series, palette, legend and layout.
+- Structured modules with editable copy, CTA, media, spacing, colors and variants.
+- Rebuild preserves object placement, transform and collaboration metadata.
+- Reusable style recipes with intensity and selection/type/page scope.
+- Custom recipes can be captured from a selected object.
 
-### Quality gate
+### Collaboration and productivity
+
+- Realtime Yjs object and page synchronization.
+- Remote cursors and remote selection indicators.
+- Connecting, synced, reconnecting, offline and error states.
+- Exponential reconnect backoff with jitter, online/offline handling and periodic resynchronization.
+- Command palette with searchable actions.
+- Shortcut reference and keyboard navigation.
+
+### Plugin SDK v1
+
+- Versioned declarative JSON manifest.
+- Permission declarations for canvas read/write, assets and network access.
+- Commands for opening product panels/URLs, inserting declarative Fabric elements and controlled HTTP requests.
+- Typed settings, client/organization scoping, enable/disable and persistent installations.
+- Server-side manifest validation and permission checks.
+
+### Quality gates
 
 - TypeScript typecheck.
 - Node unit and regression tests.
-- Multi-format resize planning tests.
-- Comment mention and coordinate normalization tests.
-- Export governance tests.
-- Openverse and Wikimedia smoke tests.
-- Runtime API, Elements, template, version, review, page-order and realtime smoke tests.
-- Preference persistence smoke test.
-- Frontend and production Docker builds.
+- Openverse and Wikimedia provider smoke tests.
+- Runtime API, account, ACL, template, version, review, page-order, realtime, governance, notification and plugin smoke tests.
+- Runtime validation of original and expanded PNG Studio assets.
+- Functional Playwright editor journeys.
+- Versioned visual-regression hashes for the editor shell and PNG asset picker.
+- Canonical normalized SVG export golden file.
+- Frontend production build and Docker image build.
 
-## Usable
+## Usable but not complete market parity
 
-### Static editor
+### Smart Resize
 
-- Multi-page Fabric canvas.
-- Text, shapes, uploaded images and backgrounds.
-- Layers, persistent names, visibility, locking and ordering.
-- Group/ungroup, duplicate, alignment, position, size, rotation and opacity controls.
-- Keyboard movement, undo/redo, deletion and grouping shortcuts.
-- Crop panel and common image controls.
-- Editable smart tables, grids and frames.
-- SVG palette editing.
-- PNG, JPG, SVG and multi-page PDF export paths.
+- Geometric multi-format resize and independent campaign copies are available.
+- Variants are not live-linked after creation.
+- Semantic content-priority reflow and AI layout decisions are not implemented.
 
-### Multipage navigation
+### Spreadsheet output
 
-- Compact horizontal page strip.
-- Full-screen searchable page grid.
-- Client-side page thumbnails.
-- Direct open, rename, duplicate, delete and add actions.
-- Desktop drag-and-drop ordering with server persistence.
-- Viewer-safe read-only overview.
+- Generated pages are static snapshots, not live-linked spreadsheet records.
+- Structured charts and tables can be edited, but they are not continuously bound to workbook ranges.
 
-### Static productivity
+### Plugin ecosystem
 
-- Smart Resize for common social, print and presentation formats.
-- Multiple target formats selectable in one workflow.
-- Recently used resize presets.
-- Batch campaign copies created as independent designs with their own dimensions.
-- Design Audit for page bounds, semantic template fields, text size, brand fonts/colors, layer naming and attribution.
-- Export preflight linked directly to Design Audit and Review.
-- CSV and Markdown attribution reports.
-- Semantic template fields for text, price, CTA, image and logo.
-- Apply one CSV record to the open page.
-- Generate up to 100 pages from CSV with a safety version.
-- Federated search across enabled static providers.
-- Server-synchronized preference bridge with browser-local offline cache.
+- SDK v1 intentionally executes declarative, permission-aware actions.
+- Arbitrary remote JavaScript is not executed in the editor.
+- OAuth provider lifecycle, signed packages, webhook subscriptions, marketplace discovery and dependency/version resolution remain future ecosystem work.
 
-### Collaboration
+### Style recipes
 
-- Authenticated Yjs WebSocket endpoint.
-- Persistent collaboration state.
-- Presence metadata and collaborator indicators.
-- Multipage object synchronization foundations.
-- Numbered review pins rendered over canvas pages.
-- Pins follow their linked Fabric objects.
-- Viewer/read-only accounts retain access to comments without editing tools.
-- Comment search, state filters, page/object filters and replies.
-- Review panel for comments and approval decisions.
+- Built-in and custom recipes are functional.
+- Custom recipes are currently browser-local rather than organization-synchronized records.
 
-## Partial
+### Element semantics
 
-### Smart Resize and campaign variants
+- Tables, grids, frames, charts and modules are structured smart elements.
+- Icons, emoji, photos and freeform vectors remain normal Fabric objects; they are editable, recolorable and styleable but do not all expose dedicated semantic schemas.
 
-- Geometric scaling and relative positioning are implemented.
-- Multiple independent campaign designs can be generated in one operation.
-- Variants are independent after creation and are not live-linked.
-- Semantic text reflow and content-priority layout decisions are not implemented.
+### Collaboration acceptance
 
-### Design Audit and governance
+- Runtime realtime smoke tests and single-browser editor journeys are present.
+- A dedicated two-browser reconnect/conflict Playwright scenario remains desirable before a stable release.
 
-- It reports and selects problematic objects.
-- It exports attribution data and participates in export preflight.
-- It does not automatically repair issues.
-- Editor override decisions are not yet written to a persistent audit log.
-- Contrast analysis and complete WCAG validation are not yet implemented.
+### Accessibility and devices
 
-### Multipage navigation
+- Keyboard commands and touch-friendly page controls are present.
+- Complete WCAG auditing, screen-reader acceptance, tablet matrix testing and mobile production certification remain incomplete.
 
-- Desktop drag-and-drop is implemented.
-- Dedicated keyboard and touch ordering controls remain pending.
-- Thumbnails are generated in the browser and are not cached as persistent preview assets.
+### Raster library
 
-### Templates and brand kits
-
-- Templates, edit rules, semantic fields and brand-kit records exist.
-- Locking and editable regions require wider browser-level coverage.
-- Image/logo fields currently accept a resolvable URL instead of an integrated asset-picker replacement flow.
-- Brand application is not yet a one-click document-wide migration workflow.
-
-### Data-driven production
-
-- CSV application and multipage generation are implemented.
-- Native XLSX parsing remains pending.
-- Generated pages are static snapshots, not live-linked records.
-- Rich charts and tables are not yet bound to spreadsheet data.
-- Batch export of generated records remains pending.
-
-### Review UX
-
-- Comments render as pins and can target objects or pages.
-- Pins cannot yet be freely dragged or attached to rectangular regions.
-- Mentions are stored and displayed, but notification delivery is pending.
-- Approval and audit participate in export preflight, but no persistent governance log exists.
-- No unread-state or reviewer-assignment notification center yet.
-
-### Preferences and collections
-
-- Preferences persist across user and organization sessions.
-- The existing Elements panel remains local-first, so remote changes appear after reopening the panel or reloading the editor.
-- Complete collection-management UI remains pending.
-
-### Collaboration UX
-
-- Presence is available, but production-grade remote cursors and conflict communication remain incomplete.
-- Offline and reconnect behavior lacks a dedicated automated browser suite.
-
-### Production readiness
-
-- No Playwright editor journey suite yet.
-- No screenshot visual-regression or export golden-file suite yet.
-- Keyboard-only, WCAG, touch and tablet acceptance coverage remain incomplete.
-- The stacked PR history must be consolidated before a stable release.
-
-## Planned
-
-- Native XLSX import, record preview and column mapping.
-- Data-bound editable tables and charts.
-- Batch export for generated pages and campaign variants.
-- Persistent governance log for export overrides and approvals.
-- Drag-to-position comment pins and comment regions.
-- Mention, assignment and approval notifications.
-- Keyboard/touch page reordering and persistent thumbnail cache.
-- Integrated asset picker for semantic image/logo replacement.
-- One-click brand migration and logo replacement.
-- Playwright and visual/export regression suites.
-- Command palette and searchable shortcut reference.
-- Plugin/extension SDK and documented public integration contracts.
+- The bundled PNG Studio is now useful for common decorative and product-layout needs.
+- It is not a substitute for a full stock-photo library; photographic depth still comes from uploads and enabled external providers.
 
 ## Out of scope
 
 - Video editing.
 - Audio editing.
-- Animated timelines and GIF animation authoring.
-- 3D scene or model editing.
+- Animated timeline or GIF authoring.
+- 3D scene/model editing.
 
-## Required quality gate
+## Promotion rule
 
-Every promoted feature must satisfy all of the following:
+A feature should only be marketed as complete when:
 
-1. The UI exposes the workflow without hidden configuration.
-2. The backend or editor returns a useful result in the default setup.
+1. The UI exposes the workflow without hidden setup.
+2. The backend/editor produces a useful default result.
 3. Empty, loading, disabled and error states are explicit.
-4. At least one automated regression test covers the main failure mode.
-5. The feature participates in `pnpm check` or a runtime smoke test.
+4. At least one automated regression or runtime check covers its main failure mode.
+5. The workflow participates in CI or a repeatable acceptance test.
 
-Run locally with:
+Run the local base gate with:
 
 ```bash
 pnpm check
+```
+
+Run the browser gates with:
+
+```bash
+pnpm test:e2e
+pnpm test:visual
 ```
