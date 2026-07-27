@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeDesignColor, scoreAuditIssues, type DesignAuditIssue } from "../src/client/canvas/design-audit";
 import { STATIC_FORMAT_PRESETS } from "../src/client/canvas/smart-resize";
+import {
+  applyTemplateRecordToCanvasJson,
+  normalizeTemplateFieldKey,
+  parseCsv,
+} from "../src/client/canvas/template-fields";
 
 test("normalizes supported design colors", () => {
   assert.equal(normalizeDesignColor("#ABC"), "#aabbcc");
@@ -23,4 +28,40 @@ test("static presets exclude unsupported media and have unique identifiers", () 
   assert.equal(new Set(STATIC_FORMAT_PRESETS.map((preset) => preset.id)).size, STATIC_FORMAT_PRESETS.length);
   assert.ok(STATIC_FORMAT_PRESETS.every((preset) => preset.width > 0 && preset.height > 0));
   assert.ok(STATIC_FORMAT_PRESETS.every((preset) => !/video|audio|gif|3d/i.test(`${preset.id} ${preset.label} ${preset.group}`)));
+});
+
+test("normalizes semantic field keys", () => {
+  assert.equal(normalizeTemplateFieldKey(" Nome Prodotto "), "nome_prodotto");
+  assert.equal(normalizeTemplateFieldKey("Prezzo (€)"), "prezzo");
+});
+
+test("parses quoted comma CSV and semicolon CSV", () => {
+  const comma = parseCsv('Nome prodotto,Prezzo,Descrizione\nPizza,8.00,"Pomodoro, mozzarella"');
+  assert.deepEqual(comma.headers, ["nome_prodotto", "prezzo", "descrizione"]);
+  assert.equal(comma.records[0].descrizione, "Pomodoro, mozzarella");
+
+  const semicolon = parseCsv("Nome;Prezzo\nMargherita;8,50");
+  assert.deepEqual(semicolon.headers, ["nome", "prezzo"]);
+  assert.equal(semicolon.records[0].prezzo, "8,50");
+});
+
+test("applies data records to serialized text and image fields", () => {
+  const source = JSON.stringify({
+    version: "6.0.0",
+    objects: [
+      { type: "textbox", text: "Old", ddoneFieldKey: "title", ddoneFieldType: "text" },
+      { type: "image", src: "/old.jpg", ddoneFieldKey: "photo", ddoneFieldType: "image" },
+      { type: "group", objects: [{ type: "textbox", text: "0", ddoneFieldKey: "price", ddoneFieldType: "price" }] },
+    ],
+  });
+  const result = applyTemplateRecordToCanvasJson(source, {
+    title: "New title",
+    photo: "/new.jpg",
+    price: "12.00",
+  });
+  const parsed = JSON.parse(result.canvasJson);
+  assert.equal(result.applied, 3);
+  assert.equal(parsed.objects[0].text, "New title");
+  assert.equal(parsed.objects[1].src, "/new.jpg");
+  assert.equal(parsed.objects[2].objects[0].text, "12.00");
 });
