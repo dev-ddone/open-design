@@ -8,6 +8,8 @@ on:
       - feat/ddone-platform-foundation
       - feat/ddone-advanced-suite
       - feat/ddone-elements-universe
+      - feat/ddone-pro-elements-canvas-ux
+      - feat/ddone-smart-elements-editor
 
 permissions:
   contents: read
@@ -71,6 +73,13 @@ jobs:
         run: |
           set -o pipefail
           pnpm typecheck 2>&1 | tee typecheck.log
+
+      - name: Unit and regression tests
+        id: unit-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee unit-tests.log
 
       - name: Openverse OAuth2 token lifecycle smoke test
         id: openverse-auth-smoke
@@ -172,6 +181,7 @@ jobs:
           node scripts/advanced-api-smoke.mjs 2>&1 | tee advanced-api-smoke.log
           node scripts/template-application-smoke.mjs 2>&1 | tee template-application-smoke.log
           node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log
+          node scripts/element-preferences-smoke.mjs cookies.txt login.json 2>&1 | tee element-preferences-smoke.log
 
       - name: Build production image
         id: docker-build
@@ -188,6 +198,7 @@ jobs:
           path: |
             pnpm-lock.yaml
             typecheck.log
+            unit-tests.log
             openverse-auth-smoke.log
             wikimedia-fetch-smoke.log
             frontend-build.log
@@ -196,6 +207,7 @@ jobs:
             advanced-api-smoke.log
             template-application-smoke.log
             elements-universe-smoke.log
+            element-preferences-smoke.log
             health.json
             login.json
             client.json
