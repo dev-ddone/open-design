@@ -7,17 +7,28 @@ function screenshotHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+async function stabilizeVisualState(page: import("@playwright/test").Page): Promise<void> {
+  await page.addStyleTag({
+    content: `
+      [data-testid="notification-center-trigger"],
+      div.hidden.lg\\:flex.items-center.gap-2 {
+        visibility: hidden !important;
+      }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        caret-color: transparent !important;
+      }
+    `,
+  });
+  await page.evaluate(() => document.fonts.ready);
+}
+
 test("empty editor shell is visually stable @visual", async ({ page }, testInfo) => {
   await openFreshDesign(page);
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(500);
-  const screenshot = await page.screenshot({
-    fullPage: true,
-    mask: [
-      page.locator("[title='Notifiche']"),
-      page.locator("text=Sincronizzato"),
-    ],
-  });
+  await stabilizeVisualState(page);
+  await page.waitForTimeout(250);
+  const screenshot = await page.screenshot({ fullPage: true });
   await testInfo.attach("editor-empty-actual", { body: screenshot, contentType: "image/png" });
   expect(screenshotHash(screenshot)).toBe(visualGoldens.editorEmptyChromiumLinux);
 });
@@ -32,7 +43,12 @@ test("asset picker and PNG Studio grid are visually stable @visual", async ({ pa
   await expect(studioProvider).toBeVisible();
   await studioProvider.click();
   await expect(page.locator('img[src*="/api/studio-raster"]').first()).toBeVisible();
-  await page.waitForTimeout(500);
+  await page.waitForFunction(() => {
+    const images = Array.from(document.querySelectorAll<HTMLImageElement>('[role="dialog"] img[src*="/api/studio-raster"]'));
+    return images.length > 0 && images.every((image) => image.complete && image.naturalWidth > 0);
+  });
+  await stabilizeVisualState(page);
+  await page.waitForTimeout(250);
   const screenshot = await dialog.screenshot();
   await testInfo.attach("asset-picker-actual", { body: screenshot, contentType: "image/png" });
   expect(screenshotHash(screenshot)).toBe(visualGoldens.assetPickerChromiumLinux);
