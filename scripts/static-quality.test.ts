@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeDesignColor, scoreAuditIssues, type DesignAuditIssue } from "../src/client/canvas/design-audit";
-import { STATIC_FORMAT_PRESETS } from "../src/client/canvas/smart-resize";
+import { buildResizeVariantPlan, STATIC_FORMAT_PRESETS } from "../src/client/canvas/smart-resize";
 import {
   applyTemplateRecordToCanvasJson,
   normalizeTemplateFieldKey,
   parseCsv,
 } from "../src/client/canvas/template-fields";
+import { clampCommentAnchor, extractCommentMentions } from "../src/client/review-comments";
 
 test("normalizes supported design colors", () => {
   assert.equal(normalizeDesignColor("#ABC"), "#aabbcc");
@@ -28,6 +29,18 @@ test("static presets exclude unsupported media and have unique identifiers", () 
   assert.equal(new Set(STATIC_FORMAT_PRESETS.map((preset) => preset.id)).size, STATIC_FORMAT_PRESETS.length);
   assert.ok(STATIC_FORMAT_PRESETS.every((preset) => preset.width > 0 && preset.height > 0));
   assert.ok(STATIC_FORMAT_PRESETS.every((preset) => !/video|audio|gif|3d/i.test(`${preset.id} ${preset.label} ${preset.group}`)));
+});
+
+test("builds deterministic multi-format resize plans", () => {
+  const plan = buildResizeVariantPlan(["presentation", "instagram-story", "presentation", "missing"]);
+  assert.deepEqual(plan.map((preset) => preset.id), ["instagram-story", "presentation"]);
+});
+
+test("extracts unique review mentions and clamps pin coordinates", () => {
+  assert.deepEqual(extractCommentMentions("Ciao @Mario, verifica con @mario e @anna@example.com"), ["mario", "anna@example.com"]);
+  assert.equal(clampCommentAnchor(-0.5), 0);
+  assert.equal(clampCommentAnchor(1.5), 1);
+  assert.equal(clampCommentAnchor(Number.NaN), null);
 });
 
 test("normalizes semantic field keys", () => {
