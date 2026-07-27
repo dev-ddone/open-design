@@ -89,6 +89,24 @@ Key lesson: multi-format work should be planned as one campaign operation, not r
 - Viewer/read-only users can access review without receiving editing tools.
 - Comments can be filtered by state, page, selected object and search query.
 
+### Governed delivery
+
+- Export is preceded by a preflight rather than silently ignoring unresolved quality and review state.
+- Clean, approved documents export without additional friction.
+- Blocking conditions and advisory conditions are visually separated.
+- Viewer sessions cannot bypass blocking errors.
+- Editor overrides require an explicit action and remain distinguishable from the normal export path.
+- The dialog routes directly to Design Audit or Review instead of leaving the user to search for the problem.
+
+### Multipage overview
+
+- The compact horizontal page strip remains available for short documents.
+- Large documents gain a separate full-screen grid rather than expanding the editor chrome indefinitely.
+- Page search uses both title and visible page number.
+- Full-document ordering is allowed only when no filtered pages are hidden.
+- Reordering validates the complete page set server-side before persisting.
+- A stale client receives a conflict instead of silently dropping or overwriting pages.
+
 ### Progressive disclosure
 
 - Viewer sessions see review controls only.
@@ -102,15 +120,16 @@ Key lesson: multi-format work should be planned as one campaign operation, not r
 - No AI resize claim: current layout adaptation is geometric and documented as such.
 - No simulated mention notifications until an actual delivery mechanism exists.
 - No claim that independent campaign copies are live-linked variants.
+- No claim that an override is equivalent to approval; it remains an explicit exception.
 
 ## Remaining high-priority UX gaps
 
-1. Approval and audit gates before export.
-2. Drag-to-position comment pins and rectangular comment regions.
-3. In-app and email delivery for mentions, assignments and approval requests.
-4. Native XLSX import with column mapping and record preview.
-5. Batch export for generated pages and campaign variants.
-6. Thumbnail/grid page overview for large documents.
+1. Drag-to-position comment pins and rectangular comment regions.
+2. In-app and email delivery for mentions, assignments and approval requests.
+3. Native XLSX import with column mapping and record preview.
+4. Batch export for generated pages and campaign variants.
+5. Persistent governance log for export overrides and approval decisions.
+6. Keyboard and touch page reordering plus persistent thumbnail caching.
 7. Integrated asset picker for semantic image and logo fields.
 8. One-click document-wide brand migration and logo replacement.
 9. Playwright journeys, screenshot regression and export golden files.
@@ -128,4 +147,6 @@ A workflow is not considered complete unless:
 - Viewer, Editor and Admin behavior is understandable from the interface;
 - the user can recover through undo, saved versions or non-destructive copies;
 - automation produces inspectable output rather than silently changing the source;
+- filtered views never imply that hidden data was deleted or reordered;
+- governance exceptions require an explicit action;
 - the main failure mode is covered by automated validation.
