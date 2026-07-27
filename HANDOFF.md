@@ -12,7 +12,7 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 
 ## Current version
 
-`2.9.0-alpha.1`
+`2.10.0-alpha.1`
 
 ## What is implemented
 
@@ -32,6 +32,8 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 - multi-select resize formats and batch campaign project creation;
 - recently used resize formats;
 - Design Audit for brand, layout, accessibility, templates and attribution;
+- governed export preflight using audit, review state and unresolved comments;
+- Viewer export blocks and explicit Editor override;
 - CSV/Markdown attribution reports;
 - design comments tied to page or object;
 - numbered contextual comment pins over canvas pages;
@@ -43,7 +45,10 @@ DDone Design is a static visual-design platform. Video, audio, animated timeline
 - semantic template fields for text, price, CTA, image and logo;
 - required-field and duplicate-key validation;
 - CSV application to the current page;
-- CSV generation of up to 100 pages with a safety version.
+- CSV generation of up to 100 pages with a safety version;
+- compact page strip and full-screen searchable page overview;
+- page thumbnails, direct actions and drag-and-drop ordering;
+- atomic complete-page ordering with stale-list protection.
 
 ## Database migrations
 
@@ -64,37 +69,45 @@ pnpm install --no-frozen-lockfile
 pnpm check
 ```
 
-The CI workflow additionally boots PostgreSQL, starts the production server, runs migrations, verifies authentication/client/design flows, tests Elements, realtime collaboration, preferences and contextual review, then builds the production Docker image.
+The CI workflow additionally boots PostgreSQL, starts the production server, runs migrations, verifies authentication/client/design flows, tests Elements, realtime collaboration, preferences, contextual review and atomic page ordering, then builds the production Docker image.
 
 ## Required staging acceptance
 
 1. Log in as OWNER, client EDITOR and VIEWER.
 2. Verify that Viewer sees comments but not editing tools.
-3. Create a multipage design and verify permissions.
-4. Insert local and remote SVG/image assets.
-5. Favorite an element, open another browser session and verify synchronization after reopening the Elements panel.
-6. Insert and edit a smart table and photo grid.
-7. Group objects, reorder layers and use keyboard movement.
-8. Select multiple Smart Resize formats and create a campaign batch.
-9. Open every generated variant and inspect its dimensions and layout.
-10. Apply a brand kit and run Controllo design.
-11. Export CSV and Markdown attribution reports.
-12. Mark text, price and image objects as semantic template fields.
-13. Import a CSV, apply one record and generate multiple pages.
-14. Add an object comment and verify that its pin follows the object.
-15. Add a page comment, reply, filter by page/object and resolve the thread.
-16. Verify mention chips, request review and approve the design.
-17. Export PNG, SVG and multipage PDF and compare visually.
-18. Edit simultaneously from two browsers and test reconnect.
+3. Create a document with at least ten pages.
+4. Open the page grid, search by title and switch pages.
+5. Drag pages to new positions, reload and verify the persisted order.
+6. Insert local and remote SVG/image assets.
+7. Favorite an element, open another browser session and verify synchronization after reopening the Elements panel.
+8. Insert and edit a smart table and photo grid.
+9. Group objects, reorder layers and use keyboard movement.
+10. Select multiple Smart Resize formats and create a campaign batch.
+11. Open every generated variant and inspect its dimensions and layout.
+12. Apply a brand kit and run Controllo design.
+13. Attempt export with an audit error, open comments and `CHANGES_REQUESTED` status.
+14. Verify Viewer cannot bypass blockers and Editor receives an explicit override action.
+15. Approve and clean the document, then verify export starts directly.
+16. Export CSV and Markdown attribution reports.
+17. Mark text, price and image objects as semantic template fields.
+18. Import a CSV, apply one record and generate multiple pages.
+19. Add an object comment and verify that its pin follows the object.
+20. Add a page comment, reply, filter by page/object and resolve the thread.
+21. Verify mention chips, request review and approve the design.
+22. Export PNG, SVG and multipage PDF and compare visually.
+23. Edit simultaneously from two browsers and test reconnect.
 
 ## Known limitations
 
 - Smart Resize uses geometric scaling and relative placement; it does not perform AI or constraint-based semantic reflow.
 - Resized campaign designs and CSV-generated pages are independent after creation, not live-linked variants.
-- The audit reports issues but does not yet block export or automatically repair them.
-- Review approval does not yet enforce an export gate.
+- Design Audit reports but does not automatically repair issues.
+- Editor export overrides are explicit but are not yet written to a persistent governance log.
+- Export preflight uses the pages currently loaded by the editor; browser/export golden-file coverage remains pending.
 - Comment pins cannot yet be freely dragged or attached to rectangular regions.
 - Mention metadata is stored and displayed, but in-app/email notification delivery is not implemented.
+- Page-grid reordering currently relies on desktop drag-and-drop; keyboard and touch reordering controls remain pending.
+- Page thumbnails are generated client-side and are not persisted as cached preview assets.
 - Preference synchronization uses the existing local-first Elements UI; remote changes appear when the panel is reopened or the editor is reloaded.
 - Named collections are persisted, but complete collection-management UI remains pending.
 - CSV is supported; native XLSX parsing remains pending.
@@ -107,11 +120,11 @@ The CI workflow additionally boots PostgreSQL, starts the production server, run
 ## Next implementation order
 
 1. consolidate PR #5 with the current PR #4 head;
-2. approval and audit export gates;
-3. native XLSX import, record preview and column mapping;
-4. batch export for generated pages and campaign variants;
+2. native XLSX import, record preview and column mapping;
+3. batch export for generated pages and campaign variants;
+4. persistent audit log for export overrides and approvals;
 5. drag-to-position pins, comment regions and mention/approval notifications;
-6. thumbnail/grid page overview for large documents;
+6. keyboard/touch page reordering and persistent thumbnail cache;
 7. integrated asset replacement for semantic image/logo fields;
 8. one-click brand migration and logo replacement;
 9. Playwright editor journeys and screenshot/export visual regression;
