@@ -1,0 +1,81 @@
+name: Generate Studio 3 visual baselines
+
+on:
+  pull_request:
+    paths:
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - '.github/workflows/generate-visual-baselines.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  baselines:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: open_design
+          POSTGRES_PASSWORD: open_design
+          POSTGRES_DB: open_design
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U open_design -d open_design"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      PORT: 3006
+      APP_URL: http://127.0.0.1:3006
+      DATABASE_URL: postgresql://open_design:open_design@127.0.0.1:5432/open_design
+      JWT_SECRET: baseline-only-jwt-secret-with-more-than-thirty-two-characters
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_PATH: ./data/baseline-uploads
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      BOOTSTRAP_ADMIN_PASSWORD: ci-admin-password
+      BOOTSTRAP_ADMIN_NAME: Baseline Administrator
+      BOOTSTRAP_ORGANIZATION_NAME: Baseline Workspace
+      REGISTRATION_ENABLED: "true"
+      EMAIL_DELIVERY: log
+      ELEMENTS_PROVIDERS: builtin,uploads,iconify,openverse,wikimedia
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+          run_install: false
+      - run: pnpm install --no-frozen-lockfile --reporter=append-only
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Generate baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm start > baseline-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            curl --fail --silent http://127.0.0.1:3006/health >/dev/null && break
+            kill -0 "$SERVER_PID" 2>/dev/null || { cat baseline-server.log; exit 1; }
+            sleep 1
+          done
+          pnpm test:update-snapshots 2>&1 | tee baseline-tests.log
+      - name: Upload baselines
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-3-playwright-baselines
+          path: |
+            e2e/**/*-snapshots/**
+            baseline-server.log
+            baseline-tests.log
+            playwright-report/
+            test-results/
+          if-no-files-found: error
+          retention-days: 3
