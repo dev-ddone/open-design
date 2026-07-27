@@ -15,12 +15,27 @@ import {
   History,
   LayoutTemplate,
 } from "lucide-preact";
+import { api } from "../api";
+import { auditDesign } from "../canvas/design-audit";
 import { useEditor, CANVAS_SIZES } from "../context";
+import { buildExportPreflight, type ExportPreflightResult } from "../export-governance";
+import type { ReviewResponse } from "../review-comments";
+import type { BrandKit } from "../types";
+import { ExportPreflightDialog } from "./export-preflight-dialog";
 import { VersionHistory } from "./version-history";
 import { TemplateManager } from "./template-manager";
 
+type ExportFormat = "png" | "jpg" | "svg" | "pdf";
+interface ExportRequest {
+  format: ExportFormat;
+  label: string;
+  allPages: boolean;
+}
+
 export function Toolbar() {
   const {
+    canvas,
+    canvasMap,
     canvasWidth,
     canvasHeight,
     setCanvasSize,
@@ -51,6 +66,10 @@ export function Toolbar() {
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
+  const [checkingExport, setCheckingExport] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [pendingExport, setPendingExport] = useState<ExportRequest | null>(null);
+  const [preflight, setPreflight] = useState<ExportPreflightResult | null>(null);
 
   const currentSize = CANVAS_SIZES.find((size) => size.width === canvasWidth && size.height === canvasHeight);
   const sizeLabel = currentSize ? currentSize.label : `${canvasWidth} × ${canvasHeight}`;
@@ -60,6 +79,76 @@ export function Toolbar() {
     if (!readOnly && activeDesign && nameValue.trim()) void renameDesign(activeDesign.id, nameValue.trim());
     setEditingName(false);
   };
+
+  const performExport = async (request: ExportRequest) => {
+    setExporting(true);
+    try {
+      await exportDesign(request.format, filename, request.allPages);
+      setPendingExport(null);
+      setPreflight(null);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const requestExport = async (request: ExportRequest) => {
+    setShowExportDropdown(false);
+    if (!activeDesign?.id) {
+      await performExport(request);
+      return;
+    }
+
+    setCheckingExport(true);
+    try {
+      const [review, brandKitResult] = await Promise.all([
+        api<ReviewResponse>("GET", `/api/designs/${activeDesign.id}/review`),
+        api<BrandKit[] | { brandKits?: BrandKit[] }>("GET", "/api/brand-kits").catch(() => [] as BrandKit[]),
+      ]);
+      const brandKits = Array.isArray(brandKitResult) ? brandKitResult : brandKitResult.brandKits ?? [];
+      const activeKit = brandKits.find((kit) => kit.is_default) ?? brandKits[0] ?? null;
+      const canvases = request.allPages ? [...canvasMap.current.values()] : canvas ? [canvas] : [];
+      const reports = canvases.map((pageCanvas) => auditDesign(
+        pageCanvas,
+        pageCanvas.getWidth() || canvasWidth,
+        pageCanvas.getHeight() || canvasHeight,
+        activeKit,
+      ));
+      const result = buildExportPreflight({
+        reviewStatus: review.review.status,
+        auditErrors: reports.reduce((total, report) => total + report.errors, 0),
+        auditWarnings: reports.reduce((total, report) => total + report.warnings, 0),
+        openComments: review.comments.filter((comment) => !comment.resolved_at).length,
+        readOnly,
+      });
+      if (result.canExportImmediately) {
+        await performExport(request);
+      } else {
+        setPendingExport(request);
+        setPreflight(result);
+      }
+    } catch {
+      const fallback = buildExportPreflight({
+        reviewStatus: "DRAFT",
+        auditErrors: 0,
+        auditWarnings: 0,
+        openComments: 0,
+        readOnly,
+      });
+      fallback.notices.unshift("Il controllo automatico non è riuscito: verifica manualmente audit e revisione.");
+      fallback.canExportImmediately = false;
+      setPendingExport(request);
+      setPreflight(fallback);
+    } finally {
+      setCheckingExport(false);
+    }
+  };
+
+  const exportItems: ExportRequest[] = [
+    { format: "png", label: "PNG · current page", allPages: false },
+    { format: "jpg", label: "JPG · current page", allPages: false },
+    { format: "svg", label: "SVG · current page", allPages: false },
+    { format: "pdf", label: "PDF · all pages", allPages: true },
+  ];
 
   return (
     <>
@@ -142,20 +231,16 @@ export function Toolbar() {
           {!readOnly && <button class="p-1.5 rounded-md text-zinc-400 bg-transparent border-none cursor-pointer hover:bg-zinc-100 hover:text-zinc-900" onClick={() => setShowTemplateManager(true)} title="Create template"><LayoutTemplate size={16} /></button>}
 
           <div class="relative">
-            <button class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold border border-zinc-300 cursor-pointer bg-transparent text-zinc-600 hover:bg-zinc-100" onClick={() => setShowExportDropdown(!showExportDropdown)}>
-              <Download size={13} /> <span class="hidden sm:inline">Export</span> <ChevronDown size={11} />
+            <button disabled={checkingExport || exporting} class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold border border-zinc-300 cursor-pointer bg-transparent text-zinc-600 hover:bg-zinc-100 disabled:opacity-50" onClick={() => setShowExportDropdown(!showExportDropdown)}>
+              {checkingExport || exporting ? <span class="spinner" /> : <Download size={13} />} <span class="hidden sm:inline">{checkingExport ? "Checking…" : exporting ? "Exporting…" : "Export"}</span> <ChevronDown size={11} />
             </button>
             {showExportDropdown && (
               <>
                 <div class="fixed inset-0 z-10" onClick={() => setShowExportDropdown(false)} />
-                <div class="absolute right-0 top-full mt-1 w-48 rounded-lg border border-zinc-200 bg-white shadow-xl z-20 py-1">
-                  {[
-                    { format: "png" as const, label: "PNG · current page" },
-                    { format: "jpg" as const, label: "JPG · current page" },
-                    { format: "svg" as const, label: "SVG · current page" },
-                    { format: "pdf" as const, label: "PDF · all pages" },
-                  ].map((item) => (
-                    <button key={item.format} class="w-full text-left px-3 py-2 text-xs text-zinc-600 bg-transparent border-0 cursor-pointer hover:bg-zinc-100" onClick={() => { setShowExportDropdown(false); void exportDesign(item.format, filename, item.format === "pdf"); }}>
+                <div class="absolute right-0 top-full mt-1 w-52 rounded-lg border border-zinc-200 bg-white shadow-xl z-20 py-1">
+                  <div class="border-b border-zinc-100 px-3 py-2 text-[8px] leading-relaxed text-zinc-400">Audit, revisione e commenti aperti vengono controllati prima di generare il file.</div>
+                  {exportItems.map((item) => (
+                    <button key={item.format} class="w-full text-left px-3 py-2 text-xs text-zinc-600 bg-transparent border-0 cursor-pointer hover:bg-zinc-100" onClick={() => void requestExport(item)}>
                       {item.label}
                     </button>
                   ))}
@@ -174,6 +259,17 @@ export function Toolbar() {
       </div>
       {showHistory && <VersionHistory onClose={() => setShowHistory(false)} />}
       {showTemplateManager && <TemplateManager onClose={() => setShowTemplateManager(false)} />}
+      {preflight && pendingExport && (
+        <ExportPreflightDialog
+          result={preflight}
+          format={pendingExport.format}
+          working={exporting}
+          onCancel={() => { setPreflight(null); setPendingExport(null); }}
+          onExport={() => void performExport(pendingExport)}
+          onOpenAudit={() => { setPreflight(null); setPendingExport(null); window.dispatchEvent(new CustomEvent("ddone:open-right-panel", { detail: { tab: "audit" } })); }}
+          onOpenReview={() => { setPreflight(null); setPendingExport(null); window.dispatchEvent(new CustomEvent("ddone:open-right-panel", { detail: { tab: "review" } })); }}
+        />
+      )}
     </>
   );
 }
