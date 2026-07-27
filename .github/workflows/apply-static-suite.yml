@@ -1,0 +1,1206 @@
+name: Apply static design suite increment
+
+on:
+  push:
+    branches:
+      - feat/ddone-smart-elements-editor
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[static-suite]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ddone-smart-elements-editor
+          fetch-depth: 0
+
+      - name: Apply static product increment
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          def write(path: str, content: str) -> None:
+              target = Path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content.strip() + "\n", encoding="utf-8")
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              content = target.read_text(encoding="utf-8")
+              if old not in content:
+                  raise RuntimeError(f"Expected text not found in {path}: {old[:100]!r}")
+              target.write_text(content.replace(old, new, 1), encoding="utf-8")
+
+          def regex_once(path: str, pattern: str, replacement: str) -> None:
+              target = Path(path)
+              content = target.read_text(encoding="utf-8")
+              updated, count = re.subn(pattern, replacement, content, count=1, flags=re.S)
+              if count != 1:
+                  raise RuntimeError(f"Expected one regex match in {path}, got {count}: {pattern}")
+              target.write_text(updated, encoding="utf-8")
+
+          write("migrations/004_element_preference_items.sql", r'''
+          ALTER TABLE element_preferences
+            ADD COLUMN IF NOT EXISTS favorite_items JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1
+                FROM pg_constraint
+               WHERE conname = 'element_preferences_favorite_items_array'
+            ) THEN
+              ALTER TABLE element_preferences
+                ADD CONSTRAINT element_preferences_favorite_items_array
+                CHECK (jsonb_typeof(favorite_items) = 'array');
+            END IF;
+          END $$;
+          ''')
+
+          write("src/server/element-preferences.ts", r'''
+          import { Hono } from "hono";
+          import { HTTPException } from "hono/http-exception";
+          import { z } from "zod";
+          import type { AppVariables } from "./auth.js";
+          import { requireAuth, requireOrganization } from "./auth.js";
+          import { one } from "./db.js";
+
+          const preferences = new Hono<{ Variables: AppVariables }>();
+
+          const elementItem = z.object({
+            id: z.string().min(1).max(500),
+            name: z.string().max(300),
+            category: z.string().max(80),
+            tags: z.array(z.string().max(100)).max(60).default([]),
+            provider: z.string().max(100),
+            providerLabel: z.string().max(200),
+            kind: z.enum(["vector", "image"]),
+            format: z.enum(["svg", "png", "jpg", "webp", "other"]).optional(),
+            transparent: z.boolean().optional(),
+            license: z.string().max(300),
+            licenseUrl: z.string().url().max(2_000).optional(),
+            author: z.string().max(500).optional(),
+            sourceUrl: z.string().url().max(2_000).optional(),
+            attribution: z.string().max(1_000).optional(),
+            attributionRequired: z.boolean(),
+            previewUrl: z.string().max(2_000).optional(),
+            assetUrl: z.string().max(2_000).optional(),
+            svg: z.string().max(300_000).optional(),
+            width: z.number().positive().max(20_000).optional(),
+            height: z.number().positive().max(20_000).optional(),
+            recolorable: z.boolean().optional(),
+          });
+
+          const collection = z.object({
+            id: z.string().uuid(),
+            name: z.string().trim().min(1).max(80),
+            elementIds: z.array(z.string().min(1).max(500)).max(500),
+          });
+
+          const payloadSchema = z.object({
+            favoriteIds: z.array(z.string().min(1).max(500)).max(1_000),
+            favoriteItems: z.array(elementItem).max(250).default([]),
+            recentItems: z.array(elementItem).max(40),
+            collections: z.array(collection).max(50).default([]),
+          });
+
+          preferences.get("/api/element-preferences", requireAuth, requireOrganization, async (c) => {
+            const row = await one<{
+              favorite_ids: unknown;
+              favorite_items: unknown;
+              recent_items: unknown;
+              collections: unknown;
+            }>(
+              `SELECT favorite_ids, favorite_items, recent_items, collections
+                 FROM element_preferences
+                WHERE user_id=$1 AND organization_id=$2`,
+              [c.get("user").id, c.get("organizationId")],
+            );
+            return c.json({
+              favoriteIds: Array.isArray(row?.favorite_ids) ? row.favorite_ids : [],
+              favoriteItems: Array.isArray(row?.favorite_items) ? row.favorite_items : [],
+              recentItems: Array.isArray(row?.recent_items) ? row.recent_items : [],
+              collections: Array.isArray(row?.collections) ? row.collections : [],
+            });
+          });
+
+          preferences.put("/api/element-preferences", requireAuth, requireOrganization, async (c) => {
+            const parsed = payloadSchema.safeParse(await c.req.json().catch(() => null));
+            if (!parsed.success) {
+              throw new HTTPException(400, {
+                message: parsed.error.issues.map((issue) => issue.message).join(", "),
+              });
+            }
+            await one(
+              `INSERT INTO element_preferences(
+                 user_id,organization_id,favorite_ids,favorite_items,recent_items,collections,updated_at
+               ) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5::jsonb,$6::jsonb,now())
+               ON CONFLICT (user_id,organization_id) DO UPDATE SET
+                 favorite_ids=EXCLUDED.favorite_ids,
+                 favorite_items=EXCLUDED.favorite_items,
+                 recent_items=EXCLUDED.recent_items,
+                 collections=EXCLUDED.collections,
+                 updated_at=now()
+               RETURNING user_id`,
+              [
+                c.get("user").id,
+                c.get("organizationId"),
+                JSON.stringify(parsed.data.favoriteIds),
+                JSON.stringify(parsed.data.favoriteItems),
+                JSON.stringify(parsed.data.recentItems),
+                JSON.stringify(parsed.data.collections),
+              ],
+            );
+            return c.json({ ok: true });
+          });
+
+          export default preferences;
+          ''')
+
+          write("src/client/hooks/use-element-preferences.ts", r'''
+          import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+          import { scopedHeaders } from "../api";
+          import type { DesignElement } from "../types";
+
+          export interface ElementCollection {
+            id: string;
+            name: string;
+            elementIds: string[];
+          }
+
+          interface ElementPreferencesPayload {
+            favoriteIds: string[];
+            favoriteItems: DesignElement[];
+            recentItems: DesignElement[];
+            collections: ElementCollection[];
+          }
+
+          const FAVORITES_KEY = "ddone_design_element_favorites_v3";
+          const FAVORITE_ITEMS_KEY = "ddone_design_element_favorite_items_v1";
+          const RECENTS_KEY = "ddone_design_element_recents_v3";
+          const COLLECTIONS_KEY = "ddone_design_element_collections_v1";
+
+          function readArray<T>(key: string): T[] {
+            try {
+              const value = JSON.parse(localStorage.getItem(key) ?? "[]");
+              return Array.isArray(value) ? value as T[] : [];
+            } catch {
+              return [];
+            }
+          }
+
+          function uniqueIds(values: string[], maximum = 1_000): string[] {
+            return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))].slice(0, maximum);
+          }
+
+          function uniqueItems(values: DesignElement[], maximum: number): DesignElement[] {
+            return [...new Map(values.filter((value) => value?.id).map((value) => [value.id, value])).values()].slice(0, maximum);
+          }
+
+          export function useElementPreferences() {
+            const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+            const [favoriteItems, setFavoriteItems] = useState<DesignElement[]>([]);
+            const [recentItems, setRecentItems] = useState<DesignElement[]>([]);
+            const [collections, setCollections] = useState<ElementCollection[]>([]);
+            const [loading, setLoading] = useState(true);
+            const [hydrated, setHydrated] = useState(false);
+            const [syncing, setSyncing] = useState(false);
+            const [error, setError] = useState<string | null>(null);
+            const saveTimer = useRef<number | null>(null);
+
+            useEffect(() => {
+              const controller = new AbortController();
+              const load = async () => {
+                const localIds = readArray<string>(FAVORITES_KEY);
+                const localFavorites = readArray<DesignElement>(FAVORITE_ITEMS_KEY);
+                const localRecents = readArray<DesignElement>(RECENTS_KEY);
+                const localCollections = readArray<ElementCollection>(COLLECTIONS_KEY);
+                try {
+                  const response = await fetch("/api/element-preferences", {
+                    credentials: "include",
+                    headers: scopedHeaders(),
+                    signal: controller.signal,
+                  });
+                  const data = await response.json() as Partial<ElementPreferencesPayload> & { error?: string };
+                  if (!response.ok) throw new Error(data.error ?? "Preferenze non disponibili");
+                  const mergedFavoriteItems = uniqueItems([
+                    ...(data.favoriteItems ?? []),
+                    ...localFavorites,
+                    ...localRecents.filter((item) => localIds.includes(item.id)),
+                  ], 250);
+                  setFavoriteIds(uniqueIds([
+                    ...(data.favoriteIds ?? []),
+                    ...localIds,
+                    ...mergedFavoriteItems.map((item) => item.id),
+                  ]));
+                  setFavoriteItems(mergedFavoriteItems);
+                  setRecentItems(uniqueItems([...(data.recentItems ?? []), ...localRecents], 40));
+                  setCollections((data.collections?.length ? data.collections : localCollections).slice(0, 50));
+                  setError(null);
+                } catch (caught) {
+                  if ((caught as Error).name === "AbortError") return;
+                  setFavoriteIds(uniqueIds([...localIds, ...localFavorites.map((item) => item.id)]));
+                  setFavoriteItems(uniqueItems(localFavorites, 250));
+                  setRecentItems(uniqueItems(localRecents, 40));
+                  setCollections(localCollections.slice(0, 50));
+                  setError(caught instanceof Error ? caught.message : "Sincronizzazione preferenze non disponibile");
+                } finally {
+                  if (!controller.signal.aborted) {
+                    setLoading(false);
+                    setHydrated(true);
+                  }
+                }
+              };
+              void load();
+              return () => controller.abort();
+            }, []);
+
+            useEffect(() => {
+              if (!hydrated) return;
+              localStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteIds));
+              localStorage.setItem(FAVORITE_ITEMS_KEY, JSON.stringify(favoriteItems));
+              localStorage.setItem(RECENTS_KEY, JSON.stringify(recentItems));
+              localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+              if (saveTimer.current) window.clearTimeout(saveTimer.current);
+              saveTimer.current = window.setTimeout(() => {
+                setSyncing(true);
+                void fetch("/api/element-preferences", {
+                  method: "PUT",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json", ...scopedHeaders() },
+                  body: JSON.stringify({ favoriteIds, favoriteItems, recentItems, collections }),
+                })
+                  .then(async (response) => {
+                    if (!response.ok) {
+                      const data = await response.json().catch(() => ({})) as { error?: string };
+                      throw new Error(data.error ?? "Salvataggio preferenze non riuscito");
+                    }
+                    setError(null);
+                  })
+                  .catch((caught) => setError(caught instanceof Error ? caught.message : "Sincronizzazione non riuscita"))
+                  .finally(() => setSyncing(false));
+              }, 450);
+              return () => {
+                if (saveTimer.current) window.clearTimeout(saveTimer.current);
+              };
+            }, [hydrated, favoriteIds, favoriteItems, recentItems, collections]);
+
+            const toggleFavorite = useCallback((element: DesignElement) => {
+              setFavoriteIds((current) => current.includes(element.id)
+                ? current.filter((id) => id !== element.id)
+                : uniqueIds([element.id, ...current]));
+              setFavoriteItems((current) => current.some((item) => item.id === element.id)
+                ? current.filter((item) => item.id !== element.id)
+                : uniqueItems([element, ...current], 250));
+            }, []);
+
+            const rememberRecent = useCallback((element: DesignElement) => {
+              setRecentItems((current) => uniqueItems([element, ...current], 40));
+            }, []);
+
+            const createCollection = useCallback((name: string): string | null => {
+              const cleanName = name.trim().slice(0, 80);
+              if (!cleanName) return null;
+              const id = crypto.randomUUID();
+              setCollections((current) => [{ id, name: cleanName, elementIds: [] }, ...current].slice(0, 50));
+              return id;
+            }, []);
+
+            const toggleCollectionElement = useCallback((collectionId: string, elementId: string) => {
+              setCollections((current) => current.map((collection) => {
+                if (collection.id !== collectionId) return collection;
+                const contains = collection.elementIds.includes(elementId);
+                return {
+                  ...collection,
+                  elementIds: contains
+                    ? collection.elementIds.filter((id) => id !== elementId)
+                    : uniqueIds([elementId, ...collection.elementIds], 500),
+                };
+              }));
+            }, []);
+
+            return {
+              favoriteIds,
+              favoriteItems,
+              recentItems,
+              collections,
+              loading,
+              syncing,
+              synced: hydrated && !syncing && !error,
+              error,
+              toggleFavorite,
+              rememberRecent,
+              createCollection,
+              toggleCollectionElement,
+            };
+          }
+          ''')
+
+          write("src/client/canvas/smart-resize.ts", r'''
+          import * as fabric from "fabric";
+          import type { DDoneFabricObject } from "../canvas-model";
+
+          export type SmartResizeMode = "balanced" | "position-only" | "stretch";
+
+          export interface StaticFormatPreset {
+            id: string;
+            label: string;
+            width: number;
+            height: number;
+            group: string;
+          }
+
+          export const STATIC_FORMAT_PRESETS: StaticFormatPreset[] = [
+            { id: "instagram-post", label: "Instagram post", width: 1080, height: 1080, group: "Social" },
+            { id: "instagram-portrait", label: "Instagram verticale", width: 1080, height: 1350, group: "Social" },
+            { id: "instagram-story", label: "Story", width: 1080, height: 1920, group: "Social" },
+            { id: "facebook-cover", label: "Facebook cover", width: 1640, height: 924, group: "Social" },
+            { id: "linkedin-post", label: "LinkedIn post", width: 1200, height: 627, group: "Social" },
+            { id: "a4-portrait", label: "A4 verticale", width: 794, height: 1123, group: "Stampa" },
+            { id: "a4-landscape", label: "A4 orizzontale", width: 1123, height: 794, group: "Stampa" },
+            { id: "presentation", label: "Presentazione 16:9", width: 1920, height: 1080, group: "Presentazioni" },
+          ];
+
+          export interface SmartResizeResult {
+            width: number;
+            height: number;
+            movedObjects: number;
+            scaledObjects: number;
+          }
+
+          export function smartResizeCanvas(
+            canvas: fabric.Canvas,
+            fromWidth: number,
+            fromHeight: number,
+            toWidth: number,
+            toHeight: number,
+            mode: SmartResizeMode,
+          ): SmartResizeResult {
+            const safeFromWidth = Math.max(1, fromWidth);
+            const safeFromHeight = Math.max(1, fromHeight);
+            const width = Math.max(64, Math.round(toWidth));
+            const height = Math.max(64, Math.round(toHeight));
+            const ratioX = width / safeFromWidth;
+            const ratioY = height / safeFromHeight;
+            const uniformScale = Math.min(ratioX, ratioY);
+            let movedObjects = 0;
+            let scaledObjects = 0;
+
+            for (const object of canvas.getObjects()) {
+              const metadata = object as DDoneFabricObject;
+              if (metadata._isBgImage) {
+                const intrinsicWidth = Math.max(1, object.width || safeFromWidth);
+                const intrinsicHeight = Math.max(1, object.height || safeFromHeight);
+                const cover = Math.max(width / intrinsicWidth, height / intrinsicHeight);
+                object.set({
+                  left: width / 2,
+                  top: height / 2,
+                  originX: "center",
+                  originY: "center",
+                  scaleX: cover,
+                  scaleY: cover,
+                });
+                object.setCoords();
+                continue;
+              }
+
+              const center = object.getCenterPoint();
+              const nextCenter = new fabric.Point(center.x * ratioX, center.y * ratioY);
+              if (mode === "stretch") {
+                object.set({
+                  scaleX: (object.scaleX ?? 1) * ratioX,
+                  scaleY: (object.scaleY ?? 1) * ratioY,
+                });
+                scaledObjects += 1;
+              } else if (mode === "balanced") {
+                object.set({
+                  scaleX: (object.scaleX ?? 1) * uniformScale,
+                  scaleY: (object.scaleY ?? 1) * uniformScale,
+                });
+                scaledObjects += 1;
+              }
+              object.setPositionByOrigin(nextCenter, "center", "center");
+              object.setCoords();
+              movedObjects += 1;
+            }
+
+            canvas.setDimensions({ width, height });
+            canvas.requestRenderAll();
+            for (const object of canvas.getObjects()) {
+              canvas.fire("object:modified", { target: object } as any);
+            }
+            return { width, height, movedObjects, scaledObjects };
+          }
+          ''')
+
+          write("src/client/components/smart-resize-panel.tsx", r'''
+          import { useMemo, useState } from "preact/hooks";
+          import { Maximize2 } from "lucide-preact";
+          import { useEditor } from "../context";
+          import { STATIC_FORMAT_PRESETS, smartResizeCanvas, type SmartResizeMode } from "../canvas/smart-resize";
+
+          export function SmartResizePanel() {
+            const { canvas, canvasWidth, canvasHeight, setCanvasSize } = useEditor();
+            const [width, setWidth] = useState(canvasWidth);
+            const [height, setHeight] = useState(canvasHeight);
+            const [mode, setMode] = useState<SmartResizeMode>("balanced");
+            const [message, setMessage] = useState<string | null>(null);
+            const grouped = useMemo(() => [...new Set(STATIC_FORMAT_PRESETS.map((preset) => preset.group))], []);
+
+            const apply = () => {
+              if (!canvas) {
+                setMessage("Apri e seleziona una pagina prima di ridimensionare.");
+                return;
+              }
+              const result = smartResizeCanvas(canvas, canvasWidth, canvasHeight, width, height, mode);
+              setCanvasSize(result.width, result.height);
+              setMessage(`${result.movedObjects} elementi riposizionati, ${result.scaledObjects} ridimensionati.`);
+            };
+
+            return (
+              <div class="flex flex-col gap-4">
+                <div class="rounded-xl border border-violet-100 bg-violet-50 p-3">
+                  <div class="mb-1 flex items-center gap-2"><Maximize2 size={16} class="text-violet-600" /><strong class="text-[11px] text-zinc-800">Smart Resize statico</strong></div>
+                  <p class="m-0 text-[9px] leading-relaxed text-zinc-500">Adatta la pagina corrente mantenendo posizione relativa, proporzioni e sfondo. Non genera video o animazioni.</p>
+                </div>
+
+                {grouped.map((group) => (
+                  <section key={group}>
+                    <strong class="mb-2 block text-[9px] text-zinc-500">{group}</strong>
+                    <div class="grid grid-cols-2 gap-2">
+                      {STATIC_FORMAT_PRESETS.filter((preset) => preset.group === group).map((preset) => (
+                        <button key={preset.id} onClick={() => { setWidth(preset.width); setHeight(preset.height); }} class={`rounded-xl border p-2 text-left cursor-pointer ${width === preset.width && height === preset.height ? "border-violet-500 bg-violet-50" : "border-zinc-200 bg-white hover:border-violet-300"}`}>
+                          <span class="block text-[9px] font-semibold text-zinc-700">{preset.label}</span>
+                          <span class="text-[8px] text-zinc-400">{preset.width} × {preset.height}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="text-[9px] font-semibold text-zinc-500">Larghezza<input type="number" min="64" max="10000" value={width} onInput={(event) => setWidth(Number((event.target as HTMLInputElement).value))} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-violet-400" /></label>
+                  <label class="text-[9px] font-semibold text-zinc-500">Altezza<input type="number" min="64" max="10000" value={height} onInput={(event) => setHeight(Number((event.target as HTMLInputElement).value))} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 px-2 text-xs outline-none focus:border-violet-400" /></label>
+                </div>
+
+                <label class="text-[9px] font-semibold text-zinc-500">Strategia
+                  <select value={mode} onChange={(event) => setMode((event.target as HTMLSelectElement).value as SmartResizeMode)} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs outline-none focus:border-violet-400">
+                    <option value="balanced">Bilanciata: scala uniforme</option>
+                    <option value="position-only">Solo layout: non scala gli oggetti</option>
+                    <option value="stretch">Adatta X e Y indipendentemente</option>
+                  </select>
+                </label>
+
+                <button onClick={apply} class="flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-gradient-to-r from-violet-600 to-fuchsia-500 text-xs font-semibold text-white cursor-pointer"><Maximize2 size={15} /> Applica alla pagina</button>
+                {message && <p class="m-0 rounded-lg bg-zinc-50 p-2 text-[9px] text-zinc-500">{message}</p>}
+              </div>
+            );
+          }
+          ''')
+
+          write("src/client/canvas/design-audit.ts", r'''
+          import * as fabric from "fabric";
+          import type { DDoneFabricObject } from "../canvas-model";
+          import type { BrandKit } from "../types";
+
+          export type AuditSeverity = "error" | "warning" | "info";
+
+          export interface DesignAuditIssue {
+            id: string;
+            severity: AuditSeverity;
+            category: "layout" | "brand" | "typography" | "license" | "accessibility";
+            title: string;
+            detail: string;
+            objectId?: string;
+          }
+
+          export interface DesignAuditReport {
+            score: number;
+            issues: DesignAuditIssue[];
+            errors: number;
+            warnings: number;
+            infos: number;
+            checkedObjects: number;
+          }
+
+          export function normalizeDesignColor(value: unknown): string | null {
+            if (typeof value !== "string") return null;
+            const color = value.trim().toLowerCase();
+            if (/^#[0-9a-f]{6}$/.test(color)) return color;
+            if (/^#[0-9a-f]{3}$/.test(color)) return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+            const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+            if (!rgb) return null;
+            return `#${[rgb[1], rgb[2], rgb[3]].map((part) => Math.max(0, Math.min(255, Number(part))).toString(16).padStart(2, "0")).join("")}`;
+          }
+
+          export function scoreAuditIssues(issues: DesignAuditIssue[]): number {
+            const penalty = issues.reduce((total, issue) => total + (issue.severity === "error" ? 12 : issue.severity === "warning" ? 5 : 1), 0);
+            return Math.max(0, 100 - penalty);
+          }
+
+          function isTextObject(object: fabric.FabricObject): object is fabric.Textbox | fabric.IText {
+            return object instanceof fabric.Textbox || object instanceof fabric.IText || object.type === "text";
+          }
+
+          function walk(object: fabric.FabricObject, callback: (item: fabric.FabricObject, topLevel: boolean) => void, topLevel = true): void {
+            callback(object, topLevel);
+            if (object instanceof fabric.Group) {
+              object.getObjects().forEach((child) => walk(child, callback, false));
+            }
+          }
+
+          function issue(
+            issues: DesignAuditIssue[],
+            object: fabric.FabricObject,
+            severity: AuditSeverity,
+            category: DesignAuditIssue["category"],
+            title: string,
+            detail: string,
+          ): void {
+            const metadata = object as DDoneFabricObject;
+            issues.push({
+              id: `${category}-${metadata.ddoneId ?? object.type}-${issues.length}`,
+              severity,
+              category,
+              title,
+              detail,
+              objectId: metadata.ddoneId,
+            });
+          }
+
+          export function auditDesign(
+            canvas: fabric.Canvas,
+            canvasWidth: number,
+            canvasHeight: number,
+            brandKit?: BrandKit | null,
+          ): DesignAuditReport {
+            const issues: DesignAuditIssue[] = [];
+            const allowedColors = new Set((brandKit?.colors ?? []).map(normalizeDesignColor).filter(Boolean) as string[]);
+            const allowedFonts = new Set((brandKit?.fonts ?? []).map((font) => font.trim().toLowerCase()).filter(Boolean));
+            const neutralColors = new Set(["#000000", "#ffffff", "#18181b", "#27272a"]);
+            let checkedObjects = 0;
+
+            for (const root of canvas.getObjects()) {
+              walk(root, (object, topLevel) => {
+                checkedObjects += 1;
+                const metadata = object as DDoneFabricObject;
+                if (topLevel && object.visible !== false && !metadata._isBgImage) {
+                  const bounds = object.getBoundingRect();
+                  const completelyOutside = bounds.left + bounds.width < 0
+                    || bounds.top + bounds.height < 0
+                    || bounds.left > canvasWidth
+                    || bounds.top > canvasHeight;
+                  const partiallyOutside = bounds.left < 0
+                    || bounds.top < 0
+                    || bounds.left + bounds.width > canvasWidth
+                    || bounds.top + bounds.height > canvasHeight;
+                  if (completelyOutside) issue(issues, object, "error", "layout", "Elemento fuori pagina", "L’elemento non è visibile nell’area esportata.");
+                  else if (partiallyOutside) issue(issues, object, "warning", "layout", "Elemento tagliato", "Una parte dell’elemento supera i bordi della pagina.");
+                }
+
+                if (isTextObject(object)) {
+                  const text = object as fabric.Textbox;
+                  const fontSize = Number(text.fontSize ?? 0) * Math.abs(text.scaleY ?? 1);
+                  if (fontSize > 0 && fontSize < 12) issue(issues, object, "warning", "accessibility", "Testo molto piccolo", `Dimensione visiva circa ${Math.round(fontSize)} px.`);
+                  const font = String(text.fontFamily ?? "").trim().toLowerCase();
+                  if (allowedFonts.size > 0 && font && !allowedFonts.has(font)) issue(issues, object, "warning", "typography", "Font fuori brand", `${text.fontFamily} non appartiene al brand kit attivo.`);
+                  if (!String(text.text ?? "").trim()) issue(issues, object, "info", "accessibility", "Testo vuoto", "Rimuovi il livello oppure inserisci il contenuto previsto.");
+                }
+
+                if (!(object instanceof fabric.FabricImage) && allowedColors.size > 0) {
+                  for (const value of [(object as any).fill, (object as any).stroke]) {
+                    const color = normalizeDesignColor(value);
+                    if (color && !allowedColors.has(color) && !neutralColors.has(color)) {
+                      issue(issues, object, "warning", "brand", "Colore fuori brand", `${color} non è presente nel brand kit attivo.`);
+                      break;
+                    }
+                  }
+                }
+
+                if (object instanceof fabric.FabricImage && !metadata.ddoneName?.trim()) {
+                  issue(issues, object, "info", "accessibility", "Immagine senza nome livello", "Assegna un nome descrittivo dal pannello Livelli.");
+                }
+
+                if (metadata.ddoneAttributionRequired) {
+                  if (!metadata.ddoneLicense || !metadata.ddoneSourceUrl) {
+                    issue(issues, object, "error", "license", "Attribuzione incompleta", "La risorsa richiede attribuzione ma fonte o licenza non sono disponibili.");
+                  } else if (!metadata.ddoneAttribution && !metadata.ddoneAuthor) {
+                    issue(issues, object, "warning", "license", "Autore non indicato", "Conserva autore o testo di attribuzione prima della pubblicazione.");
+                  }
+                }
+              });
+            }
+
+            if (canvas.getObjects().length === 0) {
+              issues.push({ id: "layout-empty", severity: "info", category: "layout", title: "Pagina vuota", detail: "Aggiungi contenuti prima dell’esportazione." });
+            }
+            const errors = issues.filter((item) => item.severity === "error").length;
+            const warnings = issues.filter((item) => item.severity === "warning").length;
+            const infos = issues.filter((item) => item.severity === "info").length;
+            return { score: scoreAuditIssues(issues), issues, errors, warnings, infos, checkedObjects };
+          }
+          ''')
+
+          write("src/client/components/design-audit-panel.tsx", r'''
+          import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+          import { BadgeCheck, RefreshCw, ShieldAlert } from "lucide-preact";
+          import { api } from "../api";
+          import { auditDesign, type DesignAuditReport } from "../canvas/design-audit";
+          import type { DDoneFabricObject } from "../canvas-model";
+          import { useEditor } from "../context";
+          import type { BrandKit } from "../types";
+
+          export function DesignAuditPanel() {
+            const { canvas, canvasWidth, canvasHeight } = useEditor();
+            const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
+            const [selectedKitId, setSelectedKitId] = useState<string>("");
+            const [report, setReport] = useState<DesignAuditReport | null>(null);
+            const [loadingKits, setLoadingKits] = useState(true);
+
+            useEffect(() => {
+              let cancelled = false;
+              void api<BrandKit[] | { brandKits?: BrandKit[] }>("GET", "/api/brand-kits")
+                .then((result) => {
+                  if (cancelled) return;
+                  const kits = Array.isArray(result) ? result : result.brandKits ?? [];
+                  setBrandKits(kits);
+                  const preferred = kits.find((kit) => kit.is_default) ?? kits[0];
+                  setSelectedKitId(preferred?.id ?? "");
+                })
+                .catch(() => setBrandKits([]))
+                .finally(() => { if (!cancelled) setLoadingKits(false); });
+              return () => { cancelled = true; };
+            }, []);
+
+            const activeKit = useMemo(() => brandKits.find((kit) => kit.id === selectedKitId) ?? null, [brandKits, selectedKitId]);
+            const scan = useCallback(() => {
+              if (!canvas) {
+                setReport(null);
+                return;
+              }
+              setReport(auditDesign(canvas, canvasWidth, canvasHeight, activeKit));
+            }, [canvas, canvasWidth, canvasHeight, activeKit]);
+
+            useEffect(() => {
+              scan();
+              if (!canvas) return;
+              const refresh = () => scan();
+              canvas.on("object:added", refresh);
+              canvas.on("object:removed", refresh);
+              canvas.on("object:modified", refresh);
+              return () => {
+                canvas.off("object:added", refresh);
+                canvas.off("object:removed", refresh);
+                canvas.off("object:modified", refresh);
+              };
+            }, [canvas, scan]);
+
+            const selectObject = (objectId?: string) => {
+              if (!canvas || !objectId) return;
+              const target = canvas.getObjects().find((object) => (object as DDoneFabricObject).ddoneId === objectId);
+              if (!target || !target.selectable) return;
+              canvas.setActiveObject(target);
+              canvas.requestRenderAll();
+            };
+
+            return (
+              <div class="flex flex-col gap-3">
+                <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                  <div class="mb-1 flex items-center gap-2"><BadgeCheck size={16} class="text-emerald-600" /><strong class="text-[11px] text-zinc-800">Controllo design</strong></div>
+                  <p class="m-0 text-[9px] leading-relaxed text-zinc-500">Verifica bordi pagina, leggibilità, font e colori del brand, nomi dei livelli e attribuzioni richieste.</p>
+                </div>
+
+                <label class="text-[9px] font-semibold text-zinc-500">Brand kit
+                  <select disabled={loadingKits} value={selectedKitId} onChange={(event) => setSelectedKitId((event.target as HTMLSelectElement).value)} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs outline-none focus:border-emerald-400">
+                    <option value="">Nessun controllo brand</option>
+                    {brandKits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name}{kit.is_default ? " · predefinito" : ""}</option>)}
+                  </select>
+                </label>
+
+                <button onClick={scan} class="flex h-9 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-[10px] font-semibold text-zinc-700 cursor-pointer hover:border-emerald-300"><RefreshCw size={13} /> Riesegui controllo</button>
+
+                {report && (
+                  <>
+                    <div class="grid grid-cols-[86px_1fr] gap-3 rounded-xl border border-zinc-200 bg-white p-3">
+                      <div class={`grid h-[72px] w-[72px] place-items-center rounded-full border-4 text-xl font-bold ${report.score >= 85 ? "border-emerald-400 text-emerald-600" : report.score >= 60 ? "border-amber-400 text-amber-600" : "border-red-400 text-red-600"}`}>{report.score}</div>
+                      <div class="flex flex-col justify-center"><strong class="text-[11px] text-zinc-800">{report.checkedObjects} oggetti controllati</strong><span class="mt-1 text-[9px] text-red-500">{report.errors} errori</span><span class="text-[9px] text-amber-600">{report.warnings} avvisi</span><span class="text-[9px] text-zinc-400">{report.infos} suggerimenti</span></div>
+                    </div>
+
+                    <div class="max-h-[420px] overflow-y-auto">
+                      {report.issues.length === 0 && <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-[10px] text-emerald-700">Nessun problema rilevato.</div>}
+                      {report.issues.map((item) => (
+                        <button key={item.id} onClick={() => selectObject(item.objectId)} class={`mb-2 w-full rounded-xl border p-3 text-left cursor-pointer ${item.severity === "error" ? "border-red-100 bg-red-50" : item.severity === "warning" ? "border-amber-100 bg-amber-50" : "border-zinc-200 bg-zinc-50"}`}>
+                          <div class="mb-1 flex items-center gap-2"><ShieldAlert size={13} class={item.severity === "error" ? "text-red-500" : item.severity === "warning" ? "text-amber-500" : "text-zinc-400"} /><strong class="text-[10px] text-zinc-700">{item.title}</strong></div>
+                          <p class="m-0 text-[9px] leading-relaxed text-zinc-500">{item.detail}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          }
+          ''')
+
+          # Wire server-backed preferences into the Elements browser.
+          replace_once(
+              "src/client/components/elements-library-v2.tsx",
+              'import { useEditor } from "../context";\n',
+              'import { useEditor } from "../context";\nimport { useElementPreferences } from "../hooks/use-element-preferences";\n',
+          )
+          regex_once(
+              "src/client/components/elements-library-v2.tsx",
+              r'  const \[favorites, setFavorites\] = useState<string\[\]>\(\(\) => readIds\(FAVORITES_KEY\)\);\n  const \[recents, setRecents\] = useState<DesignElement\[\]>\(\(\) => readRecentItems\(\)\);',
+              '''  const {
+    favoriteIds: favorites,
+    favoriteItems,
+    recentItems: recents,
+    loading: preferencesLoading,
+    syncing: preferencesSyncing,
+    synced: preferencesSynced,
+    error: preferencesError,
+    toggleFavorite: preferenceToggleFavorite,
+    rememberRecent: preferenceRememberRecent,
+  } = useElementPreferences();''',
+          )
+          regex_once(
+              "src/client/components/elements-library-v2.tsx",
+              r'  const visibleElements = useMemo\(\(\) => \{\n    if \(!showFavorites\) return elements;\n    const selected = new Set\(favorites\);\n    return elements\.filter\(\(item\) => selected\.has\(item\.id\)\);\n  \}, \[elements, favorites, showFavorites\]\);',
+              '''  const visibleElements = useMemo(
+    () => showFavorites ? favoriteItems : elements,
+    [elements, favoriteItems, showFavorites],
+  );''',
+          )
+          regex_once(
+              "src/client/components/elements-library-v2.tsx",
+              r'  const rememberRecent = useCallback\([\s\S]*?\n  \}, \[\]\);\n\n  const toggleFavorite = useCallback\([\s\S]*?\n  \}, \[\]\);\n',
+              '''  const rememberRecent = preferenceRememberRecent;
+  const toggleFavorite = preferenceToggleFavorite;
+''',
+          )
+          replace_once(
+              "src/client/components/elements-library-v2.tsx",
+              '          onFavorite={() => toggleFavorite(element.id)}',
+              '          onFavorite={() => toggleFavorite(element)}',
+          )
+          marker = '          {(category === "all" || category === "shapes") && !submittedQuery && !showFavorites && ('
+          status = '''          {(preferencesLoading || preferencesSyncing || preferencesError || preferencesSynced) && (
+            <div class={`rounded-lg border p-2 text-[9px] ${preferencesError ? "border-amber-100 bg-amber-50 text-amber-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
+              {preferencesLoading ? "Caricamento preferenze…" : preferencesSyncing ? "Sincronizzazione preferenze…" : preferencesError ? `Preferenze locali: ${preferencesError}` : "Preferiti e recenti sincronizzati tra dispositivi"}
+            </div>
+          )}
+
+'''
+          replace_once("src/client/components/elements-library-v2.tsx", marker, status + marker)
+
+          # Add Smart Resize and Design Audit to the creative tools area.
+          replace_once(
+              "src/client/components/tools-panel.tsx",
+              'import { SmartElementPanel } from "./smart-element-panel";\n',
+              'import { SmartElementPanel } from "./smart-element-panel";\nimport { SmartResizePanel } from "./smart-resize-panel";\nimport { DesignAuditPanel } from "./design-audit-panel";\n',
+          )
+          replace_once(
+              "src/client/components/tools-panel.tsx",
+              '  | "smart-element";\n',
+              '  | "smart-element"\n  | "smart-resize"\n  | "design-audit";\n',
+          )
+          replace_once(
+              "src/client/components/tools-panel.tsx",
+              '  { id: "smart-element", title: "Elemento intelligente", description: "Modifica celle, griglie e cornici mantenendo la struttura.", icon: Frame, accent: "from-violet-600 to-indigo-500" },\n',
+              '  { id: "smart-element", title: "Elemento intelligente", description: "Modifica celle, griglie e cornici mantenendo la struttura.", icon: Frame, accent: "from-violet-600 to-indigo-500" },\n  { id: "smart-resize", title: "Smart Resize", description: "Adatta il progetto ai formati statici mantenendo il layout.", icon: Frame, accent: "from-sky-500 to-indigo-500" },\n  { id: "design-audit", title: "Controllo design", description: "Verifica brand, leggibilità, bordi e attribuzioni.", icon: WandSparkles, accent: "from-emerald-500 to-teal-500" },\n',
+          )
+          replace_once(
+              "src/client/components/tools-panel.tsx",
+              '  if (activeTool === "smart-element") return <SmartElementPanel />;\n',
+              '  if (activeTool === "smart-element") return <SmartElementPanel />;\n  if (activeTool === "smart-resize") return <SmartResizePanel />;\n  if (activeTool === "design-audit") return <DesignAuditPanel />;\n',
+          )
+
+          write("scripts/element-preferences-smoke.mjs", r'''
+          import fs from "node:fs/promises";
+
+          const [cookiesPath, loginPath] = process.argv.slice(2);
+          if (!cookiesPath || !loginPath) throw new Error("Usage: node scripts/element-preferences-smoke.mjs cookies.txt login.json");
+
+          const cookieFile = await fs.readFile(cookiesPath, "utf8");
+          const cookie = cookieFile
+            .split(/\r?\n/)
+            .filter((line) => line && !line.startsWith("#"))
+            .map((line) => line.split("\t"))
+            .filter((parts) => parts.length >= 7)
+            .map((parts) => `${parts[5]}=${parts[6]}`)
+            .join("; ");
+          const login = JSON.parse(await fs.readFile(loginPath, "utf8"));
+          const organizationId = login.organizations?.[0]?.id;
+          if (!cookie || !organizationId) throw new Error("Unable to resolve authenticated smoke-test context");
+
+          const headers = {
+            Cookie: cookie,
+            "X-Organization-ID": organizationId,
+            "Content-Type": "application/json",
+          };
+          const favorite = {
+            id: "local-pack:structures:table-menu:svg",
+            name: "Tabella menu 4×2",
+            category: "tables",
+            tags: ["menu", "prezzi"],
+            provider: "local-structures",
+            providerLabel: "DDone Structures",
+            kind: "vector",
+            format: "svg",
+            transparent: true,
+            license: "MIT",
+            attributionRequired: false,
+            recolorable: true,
+          };
+          const payload = {
+            favoriteIds: [favorite.id],
+            favoriteItems: [favorite],
+            recentItems: [favorite],
+            collections: [{ id: "11111111-1111-4111-8111-111111111111", name: "Menu", elementIds: [favorite.id] }],
+          };
+
+          const put = await fetch("http://127.0.0.1:3006/api/element-preferences", { method: "PUT", headers, body: JSON.stringify(payload) });
+          if (!put.ok) throw new Error(`Preference PUT failed: ${put.status} ${await put.text()}`);
+          const get = await fetch("http://127.0.0.1:3006/api/element-preferences", { headers });
+          if (!get.ok) throw new Error(`Preference GET failed: ${get.status} ${await get.text()}`);
+          const result = await get.json();
+          if (result.favoriteItems?.[0]?.id !== favorite.id) throw new Error("Favorite item did not persist");
+          if (result.collections?.[0]?.name !== "Menu") throw new Error("Collection did not persist");
+          console.log("Cross-device element preferences persistence verified.");
+          ''')
+
+          replace_once(
+              ".github/workflows/ci.yml",
+              '          node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log\n',
+              '          node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log\n          node scripts/element-preferences-smoke.mjs cookies.txt login.json 2>&1 | tee element-preferences-smoke.log\n',
+          )
+          replace_once(
+              ".github/workflows/ci.yml",
+              '            elements-universe-smoke.log\n',
+              '            elements-universe-smoke.log\n            element-preferences-smoke.log\n',
+          )
+
+          package_path = Path("package.json")
+          package = json.loads(package_path.read_text(encoding="utf-8"))
+          package["version"] = "2.6.0-alpha.1"
+          package_path.write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+          write("docs/PRODUCT_SCOPE.md", r'''
+          # Product scope
+
+          DDone Design is a self-hosted collaborative platform for **static visual design**.
+
+          ## Included product families
+
+          - social graphics and campaign variants;
+          - menus, price lists, flyers, posters and print layouts;
+          - presentations;
+          - brand-controlled client templates;
+          - editable tables, grids, frames, vectors, photographs and text;
+          - collaborative review, versioning and private asset management;
+          - PNG, JPG, SVG and PDF workflows.
+
+          ## Explicitly outside scope
+
+          The product does not target video editing, animated timelines, audio editing, GIF animation tooling or 3D scene editing. These categories must not be added to navigation, marketing copy, API capability lists or acceptance criteria unless the scope is deliberately changed in a future architecture decision record.
+
+          ## Competitive position
+
+          The goal is not to copy every Canva surface. The goal is to be stronger for agencies and organizations that need self-hosting, client separation, controlled templates, private assets, traceable licensing, brand governance and open integrations.
+          ''')
+
+          write("docs/STATIC_DESIGN_ROADMAP.md", r'''
+          # Static design roadmap
+
+          ## Implemented foundation
+
+          - multi-page Fabric editor;
+          - precise positioning, grouping, layers and keyboard controls;
+          - editable tables, grids and frames;
+          - local and federated static asset search;
+          - organization/client permissions and private storage;
+          - realtime object synchronization and versions;
+          - brand kits and controlled template policies;
+          - synchronized favorites, recent elements and collection storage;
+          - static Smart Resize;
+          - design audit for brand, layout, accessibility and licenses.
+
+          ## Next release gates
+
+          ### Template intelligence
+
+          - semantic placeholders for text, image, logo, price and CTA;
+          - replacement without losing crop or typography;
+          - required fields and validation before export;
+          - template variant families and inherited updates.
+
+          ### Agency workflow
+
+          - comments anchored to objects;
+          - approval states and reviewer roles;
+          - client-safe editing mode;
+          - publish/export approval gate;
+          - audit log and review history.
+
+          ### Data-driven production
+
+          - CSV/XLSX import;
+          - row-to-design bulk generation;
+          - editable data-bound tables and charts;
+          - QR/barcode values bound to records;
+          - batch export.
+
+          ### Reliability
+
+          - Playwright editor journeys;
+          - screenshot visual regression;
+          - export golden-file comparisons;
+          - reconnect/offline collaboration tests;
+          - keyboard-only and WCAG acceptance tests;
+          - tablet layout acceptance tests.
+
+          Video, audio, animated timelines and 3D are intentionally excluded.
+          ''')
+
+          write("changelog/README.md", r'''
+          # Changelog directory
+
+          Every release has one Markdown file named with its semantic version. Entries describe user-visible behavior, migrations, validation and known limitations. `UNRELEASED.md` is the only place for work not yet assigned to a version.
+
+          Release files must contain:
+
+          1. scope;
+          2. added/changed/fixed items;
+          3. database or deployment changes;
+          4. validation performed;
+          5. known limitations and compatibility notes.
+          ''')
+
+          write("changelog/2.3.0-alpha.1.md", r'''
+          # 2.3.0-alpha.1 — Platform foundation
+
+          - Node/Hono runtime, PostgreSQL migrations and Docker/Coolify deployment.
+          - Organizations, clients, roles, authentication and private object storage.
+          - Multi-page Fabric editor foundation and authenticated realtime rooms.
+          - Initial templates, uploads and static Elements catalog.
+          ''')
+
+          write("changelog/2.4.0-alpha.1.md", r'''
+          # 2.4.0-alpha.1 — Static Elements universe
+
+          - Federated SVG/image search with source and license metadata.
+          - Bundled DDone Structures, Tabler Icons and Twemoji.
+          - Openverse, Wikimedia and optional stock-provider integrations.
+          - Creative image/vector tools and persistent imported assets.
+          - Removed unsupported media promises from the active static catalog.
+          ''')
+
+          write("changelog/2.5.0-alpha.1.md", r'''
+          # 2.5.0-alpha.1 — Smart editor
+
+          - Editable tables, grids and frames.
+          - SVG palette replacement.
+          - Layers panel, grouping, context menu and precision controls.
+          - Keyboard shortcuts and improved Wikimedia reliability.
+          - Server foundation for favorites, recents and named collections.
+          ''')
+
+          write("changelog/2.6.0-alpha.1.md", r'''
+          # 2.6.0-alpha.1 — Static quality suite
+
+          ## Added
+
+          - cross-device synchronization of favorite element IDs and complete favorite cards;
+          - migration `004_element_preference_items.sql`;
+          - static Smart Resize with social, print and presentation presets;
+          - design audit for off-canvas objects, small text, brand fonts/colors, layer naming and required attribution;
+          - persistent collection support in the client hook;
+          - runtime smoke test for element preference persistence;
+          - product scope, roadmap, changelog policy and root handoff document.
+
+          ## Changed
+
+          - package version raised to `2.6.0-alpha.1`;
+          - favorites no longer depend only on the currently loaded search page;
+          - local storage is now a fallback/cache instead of the primary preference source.
+
+          ## Scope
+
+          Video, audio, animated GIF tooling and 3D remain intentionally excluded.
+          ''')
+
+          write("changelog/UNRELEASED.md", r'''
+          # Unreleased
+
+          ## Planned
+
+          - semantic template placeholders and required-field validation;
+          - object comments and approval workflow;
+          - data-bound tables/charts and bulk creation;
+          - Playwright and visual regression coverage;
+          - export fidelity/golden-file suite;
+          - automated attribution report during export.
+
+          Do not list video, audio, animated timeline or 3D work here: those areas are outside product scope.
+          ''')
+
+          write("HANDOFF.md", r'''
+          # DDone Design handoff
+
+          ## Current delivery branch
+
+          `feat/ddone-smart-elements-editor`
+
+          This branch is stacked on PR #4 and contains the most complete static-editor implementation. Continue from this branch until the stacked pull requests are consolidated.
+
+          ## Product decision
+
+          DDone Design is a static visual-design platform. Video, audio, animated timelines, GIF editing and 3D are not part of the product. See `docs/PRODUCT_SCOPE.md`.
+
+          ## Current version
+
+          `2.6.0-alpha.1`
+
+          ## What is implemented
+
+          - organization/client tenancy and role-aware APIs;
+          - private local/S3-compatible asset storage;
+          - multi-page Fabric editor;
+          - realtime object-level Yjs collaboration foundations;
+          - PNG, JPG, SVG and multi-page PDF export paths;
+          - versions, restore and template application snapshots;
+          - brand kits and template edit policies;
+          - strict static Elements catalog with local packs and external providers;
+          - editable smart tables, grids and frames;
+          - layers, grouping, ordering, visibility, locking and keyboard controls;
+          - SVG palette editing and image tools;
+          - synchronized favorites, recent items and collection persistence;
+          - static Smart Resize;
+          - design audit for brand, layout, accessibility and attribution.
+
+          ## Database migrations
+
+          Migrations run automatically at startup. New in this release:
+
+          - `003_element_preferences.sql` creates user/organization preference storage;
+          - `004_element_preference_items.sql` stores complete favorite cards for cross-device rendering.
+
+          Existing PostgreSQL and MinIO volumes remain compatible. Back up both before staging deployment.
+
+          ## Local validation
+
+          ```bash
+          corepack enable
+          pnpm install --no-frozen-lockfile
+          pnpm check
+          ```
+
+          The CI workflow additionally boots PostgreSQL, starts the production server, verifies authentication/client/design flows, tests Elements and element-preference persistence, exercises realtime collaboration and builds the Docker image.
+
+          ## Required staging acceptance
+
+          1. Log in as OWNER, client EDITOR and VIEWER.
+          2. Create a multipage design and verify permissions.
+          3. Insert local and remote SVG/image assets.
+          4. Favorite an element, open another browser session and verify synchronization.
+          5. Insert and edit a smart table and photo grid.
+          6. Group objects, reorder layers and use keyboard movement.
+          7. Run Smart Resize from square to story and A4 formats.
+          8. Apply a brand kit and run Controllo design.
+          9. Export PNG, SVG and multipage PDF and compare visually.
+          10. Edit simultaneously from two browsers and test reconnect.
+
+          ## Known limitations
+
+          - Smart Resize transforms the current page; linked campaign variants and automatic content reflow are not yet implemented.
+          - The design audit reports issues but does not yet block export or automatically repair them.
+          - Named collections are persisted by the client hook, but a complete collection-management UI is still pending.
+          - Template placeholders are still object-ID policies rather than semantic fields.
+          - Comments, approvals and reviewer workflows are not yet implemented.
+          - Data-bound charts/tables, CSV bulk generation and batch export remain pending.
+          - Browser E2E, visual regression and export golden-file coverage remain incomplete.
+          - Remote cursor and offline/reconnect behavior require broader acceptance coverage.
+
+          ## Next implementation order
+
+          1. semantic template placeholders and image replacement;
+          2. comments, mentions and approval workflow;
+          3. CSV/XLSX bulk creation and data-bound components;
+          4. Playwright + visual/export regression tests;
+          5. export attribution report and optional export blocking on audit errors;
+          6. linked campaign variants built on top of Smart Resize.
+
+          ## Release documentation
+
+          Every release must update `changelog/`, this handoff when architecture or deployment changes, and `docs/IMPLEMENTATION_STATUS.md`. Marketing claims are allowed only when a workflow has UI exposure, a working default configuration, explicit error states and automated validation.
+          ''')
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text(encoding="utf-8")
+          scope_block = '''\n## Static product scope\n\nDDone Design focuses on static graphics, presentations, print layouts, brand-controlled templates and collaborative agency workflows. Video editing, audio, animated timelines and 3D are intentionally outside scope. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).\n'''
+          if "## Static product scope" not in readme:
+              anchor = "## Included\n"
+              if anchor in readme:
+                  readme = readme.replace(anchor, scope_block + "\n" + anchor, 1)
+              else:
+                  readme += scope_block
+          readme_path.write_text(readme, encoding="utf-8")
+
+          status_path = Path("docs/IMPLEMENTATION_STATUS.md")
+          status = status_path.read_text(encoding="utf-8")
+          addition = '''\n## 2.6 static quality increment\n\n- **Verified:** element preference API persists complete favorite items, recents and collections through migration 004 and a runtime smoke test.\n- **Usable:** Smart Resize transforms the current static page into common social, print and presentation sizes.\n- **Usable:** Controllo design scans brand fonts/colors, page bounds, text size, layer naming and third-party attribution metadata.\n- **Partial:** linked campaign variants, semantic template placeholders, approvals and data-driven bulk generation remain future work.\n- **Out of scope:** video, audio, animated timeline/GIF editing and 3D.\n'''
+          if "## 2.6 static quality increment" not in status:
+              status += addition
+          status_path.write_text(status, encoding="utf-8")
+
+          smart_docs = Path("docs/SMART_ELEMENTS_EDITOR.md")
+          smart = smart_docs.read_text(encoding="utf-8")
+          smart_addition = '''\n## Static quality tools\n\nFavorites and recent items now synchronize through the authenticated preference API, with local storage used as an offline fallback. Smart Resize adapts the current page to common static formats. Controllo design audits brand consistency, page bounds, text readability, layer naming and required attribution.\n'''
+          if "## Static quality tools" not in smart:
+              smart += smart_addition
+          smart_docs.write_text(smart, encoding="utf-8")
+
+          workflow = Path(".github/workflows/apply-static-suite.yml")
+          if workflow.exists():
+              workflow.unlink()
+          PY
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --reporter=append-only
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Regression tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Commit increment
+        shell: bash
+        run: |
+          git config user.name "DDone Static Suite Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: complete static quality suite [static-suite]"
+          git push origin HEAD:feat/ddone-smart-elements-editor
