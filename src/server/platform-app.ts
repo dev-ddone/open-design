@@ -29,12 +29,16 @@ type InternalRoute = {
   handler: (context: unknown, next: () => Promise<void>) => unknown;
 };
 
-function addRasterCompatibilityRoute(subApp: Hono<any>, prefix: string): void {
+function addRasterCompatibilityRoute(
+  rootApp: Hono<{ Variables: AppVariables }>,
+  subApp: Hono<any>,
+  prefix: string,
+): void {
   const routes = (subApp as unknown as { routes?: InternalRoute[] }).routes ?? [];
   const legacy = routes.find((route) => route.method === "GET" && route.path === `${prefix}/:id.png`);
   if (!legacy) throw new Error(`Missing bundled raster renderer for ${prefix}`);
 
-  subApp.get(`${prefix}/:filename`, async (c) => {
+  rootApp.get(`${prefix}/:filename`, async (c) => {
     const filename = c.req.param("filename");
     if (!/^[a-z0-9-]+\.png$/i.test(filename)) return c.json({ error: "Raster asset not found" }, 404);
     const id = filename.slice(0, -4);
@@ -66,10 +70,11 @@ function addRasterCompatibilityRoute(subApp: Hono<any>, prefix: string): void {
   });
 }
 
-// Hono 4 does not treat `:id.png` as a parameter followed by a static suffix.
-// Add an explicit filename route and delegate to each pack's existing renderer.
-addRasterCompatibilityRoute(studioRasterPack, "/api/studio-raster");
-addRasterCompatibilityRoute(studioRasterPackExtra, "/api/studio-raster-extra");
+// Hono 4 captures the `.png` suffix inside `:id` for the legacy routes.
+// Register higher-priority filename routes on the root app, strip the suffix,
+// and delegate to the existing pack renderers without duplicating asset data.
+addRasterCompatibilityRoute(app, studioRasterPack, "/api/studio-raster");
+addRasterCompatibilityRoute(app, studioRasterPackExtra, "/api/studio-raster-extra");
 
 app.use("/api/elements-universe/*", async (c, next) => {
   await next();
