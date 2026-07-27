@@ -10,6 +10,7 @@ on:
       - feat/ddone-elements-universe
       - feat/ddone-pro-elements-canvas-ux
       - feat/ddone-smart-elements-editor
+      - feat/ddone-studio-3
 
 permissions:
   contents: read
@@ -184,6 +185,29 @@ jobs:
           node scripts/element-preferences-smoke.mjs cookies.txt login.json 2>&1 | tee element-preferences-smoke.log
           node scripts/design-review-smoke.mjs cookies.txt login.json design.json 2>&1 | tee design-review-smoke.log
           node scripts/page-order-smoke.mjs cookies.txt login.json client.json design.json 2>&1 | tee page-order-smoke.log
+          node scripts/studio-3-smoke.mjs 2>&1 | tee studio-3-smoke.log
+          node scripts/studio-raster-extra-smoke.mjs 2>&1 | tee studio-raster-extra-smoke.log
+
+      - name: Install Playwright Chromium
+        id: playwright-install
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright browser, visual and export golden tests
+        id: playwright-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm start > playwright-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            curl --fail --silent http://127.0.0.1:3006/health >/dev/null && break
+            kill -0 "$SERVER_PID" 2>/dev/null || { cat playwright-server.log; exit 1; }
+            sleep 1
+          done
+          set -o pipefail
+          pnpm test:e2e 2>&1 | tee playwright-e2e.log
+          pnpm test:visual 2>&1 | tee playwright-visual.log
 
       - name: Build production image
         id: docker-build
@@ -212,6 +236,13 @@ jobs:
             element-preferences-smoke.log
             design-review-smoke.log
             page-order-smoke.log
+            studio-3-smoke.log
+            studio-raster-extra-smoke.log
+            playwright-server.log
+            playwright-e2e.log
+            playwright-visual.log
+            playwright-report/
+            test-results/
             health.json
             login.json
             client.json
