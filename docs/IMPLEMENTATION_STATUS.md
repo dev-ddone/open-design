@@ -1,6 +1,6 @@
 # Implementation status
 
-This document describes `feat/ddone-smart-elements-editor` at version `2.8.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
+This document describes `feat/ddone-smart-elements-editor` at version `2.9.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
 
 ## Status levels
 
@@ -12,7 +12,7 @@ This document describes `feat/ddone-smart-elements-editor` at version `2.8.0-alp
 
 ## Product maturity
 
-DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations and controlled review workflows. It is not yet a complete Canva replacement.
+DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations, multi-format campaign creation and controlled review workflows. It is not yet a complete Canva replacement.
 
 ## Verified
 
@@ -44,9 +44,12 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 - Persistent design review state.
 - Comments attached to design, page or object.
+- Normalized page-comment coordinates.
+- Object-linked canvas pins.
+- Mention metadata extraction and persistence.
 - Comment resolution and reopening.
 - Draft, in-review, changes-requested and approved transitions.
-- Runtime smoke coverage for comment and approval persistence.
+- Runtime smoke coverage for comment anchors, anchor movement, mentions, resolution and approval persistence.
 
 ### Data and template utilities
 
@@ -59,6 +62,8 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 - TypeScript typecheck.
 - Node unit and regression tests.
+- Multi-format resize planning tests.
+- Comment mention and coordinate normalization tests.
 - Openverse and Wikimedia smoke tests.
 - Runtime API, Elements, template, version, review and realtime smoke tests.
 - Preference persistence smoke test.
@@ -81,7 +86,9 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 ### Static productivity
 
 - Smart Resize for common social, print and presentation formats.
-- Resized campaign copies created as independent designs with their own dimensions.
+- Multiple target formats selectable in one workflow.
+- Recently used resize presets.
+- Batch campaign copies created as independent designs with their own dimensions.
 - Design Audit for page bounds, semantic template fields, text size, brand fonts/colors, layer naming and attribution.
 - CSV and Markdown attribution reports.
 - Semantic template fields for text, price, CTA, image and logo.
@@ -96,6 +103,10 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Persistent collaboration state.
 - Presence metadata and collaborator indicators.
 - Multipage object synchronization foundations.
+- Numbered review pins rendered over canvas pages.
+- Pins follow their linked Fabric objects.
+- Viewer/read-only accounts retain access to comments without editing tools.
+- Comment search, state filters, page/object filters and replies.
 - Review panel for comments and approval decisions.
 
 ## Partial
@@ -103,7 +114,7 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 ### Smart Resize and campaign variants
 
 - Geometric scaling and relative positioning are implemented.
-- Separate campaign designs can be generated.
+- Multiple independent campaign designs can be generated in one operation.
 - Variants are independent after creation and are not live-linked.
 - Semantic text reflow and content-priority layout decisions are not implemented.
 
@@ -131,10 +142,11 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 ### Review UX
 
-- Comments can target an object or page and can be resolved.
-- Comments do not yet render as pins over the canvas.
-- Mentions, notifications and email delivery are pending.
+- Comments render as pins and can target objects or pages.
+- Pins cannot yet be freely dragged or attached to rectangular regions.
+- Mentions are stored and displayed, but notification delivery is pending.
 - Approval does not currently enforce an export gate.
+- No unread-state or reviewer-assignment notification center yet.
 
 ### Preferences and collections
 
@@ -156,12 +168,17 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 ## Planned
 
-- Native XLSX import.
+- Native XLSX import, record preview and column mapping.
 - Data-bound editable tables and charts.
-- Batch export for generated pages/records.
+- Batch export for generated pages and campaign variants.
 - Export gates based on approval status and audit errors.
-- Canvas comment pins, mentions and notifications.
+- Drag-to-position comment pins and comment regions.
+- Mention, assignment and approval notifications.
+- Thumbnail/grid page overview for large documents.
+- Integrated asset picker for semantic image/logo replacement.
+- One-click brand migration and logo replacement.
 - Playwright and visual/export regression suites.
+- Command palette and searchable shortcut reference.
 - Plugin/extension SDK and documented public integration contracts.
 
 ## Out of scope
