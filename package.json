@@ -16,9 +16,9 @@
     "db:migrate": "tsx src/server/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test scripts/*.test.ts src/**/*.test.ts",
-    "test:e2e": "playwright test --grep-invert @visual",
-    "test:visual": "playwright test --grep @visual",
-    "test:update-snapshots": "playwright test --update-snapshots",
+    "test:e2e": "playwright test --grep-invert \"@visual|@golden\"",
+    "test:visual": "playwright test --grep \"@visual|@golden\"",
+    "test:update-snapshots": "playwright test --grep \"@visual|@golden\" --update-snapshots",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
