@@ -6,6 +6,7 @@ import templateApplication from "./template-application.js";
 import elementsLocalization from "./elements-localization.js";
 import elementPreferences from "./element-preferences.js";
 import designReviews from "./design-reviews.js";
+import pageOrder from "./page-order.js";
 import assetContent from "./asset-content.js";
 import elementPackContent from "./element-pack-content.js";
 import elementsCatalogV2 from "./elements-catalog-v2.js";
@@ -47,6 +48,8 @@ app.route("/", elementsLocalization);
 app.route("/", elementPreferences);
 // Comments and approval states are scoped to accessible designs.
 app.route("/", designReviews);
+// Page ordering validates the complete page set and persists atomically.
+app.route("/", pageOrder);
 // Stable asset URLs can be rendered by Fabric/Image using the session cookie alone.
 app.route("/", assetContent);
 // Administrator-configured packs use a strict same-origin, zero-index-safe content proxy.
