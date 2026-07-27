@@ -7,7 +7,7 @@ import { one } from "./db.js";
 
 const preferences = new Hono<{ Variables: AppVariables }>();
 
-const recentItem = z.object({
+const elementItem = z.object({
   id: z.string().min(1).max(500),
   name: z.string().max(300),
   category: z.string().max(80),
@@ -39,23 +39,26 @@ const collection = z.object({
 
 const payloadSchema = z.object({
   favoriteIds: z.array(z.string().min(1).max(500)).max(1_000),
-  recentItems: z.array(recentItem).max(40),
+  favoriteItems: z.array(elementItem).max(250).default([]),
+  recentItems: z.array(elementItem).max(40),
   collections: z.array(collection).max(50).default([]),
 });
 
 preferences.get("/api/element-preferences", requireAuth, requireOrganization, async (c) => {
   const row = await one<{
     favorite_ids: unknown;
+    favorite_items: unknown;
     recent_items: unknown;
     collections: unknown;
   }>(
-    `SELECT favorite_ids, recent_items, collections
+    `SELECT favorite_ids, favorite_items, recent_items, collections
        FROM element_preferences
       WHERE user_id=$1 AND organization_id=$2`,
     [c.get("user").id, c.get("organizationId")],
   );
   return c.json({
     favoriteIds: Array.isArray(row?.favorite_ids) ? row.favorite_ids : [],
+    favoriteItems: Array.isArray(row?.favorite_items) ? row.favorite_items : [],
     recentItems: Array.isArray(row?.recent_items) ? row.recent_items : [],
     collections: Array.isArray(row?.collections) ? row.collections : [],
   });
@@ -69,10 +72,12 @@ preferences.put("/api/element-preferences", requireAuth, requireOrganization, as
     });
   }
   await one(
-    `INSERT INTO element_preferences(user_id,organization_id,favorite_ids,recent_items,collections,updated_at)
-     VALUES ($1,$2,$3::jsonb,$4::jsonb,$5::jsonb,now())
+    `INSERT INTO element_preferences(
+       user_id,organization_id,favorite_ids,favorite_items,recent_items,collections,updated_at
+     ) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5::jsonb,$6::jsonb,now())
      ON CONFLICT (user_id,organization_id) DO UPDATE SET
        favorite_ids=EXCLUDED.favorite_ids,
+       favorite_items=EXCLUDED.favorite_items,
        recent_items=EXCLUDED.recent_items,
        collections=EXCLUDED.collections,
        updated_at=now()
@@ -81,6 +86,7 @@ preferences.put("/api/element-preferences", requireAuth, requireOrganization, as
       c.get("user").id,
       c.get("organizationId"),
       JSON.stringify(parsed.data.favoriteIds),
+      JSON.stringify(parsed.data.favoriteItems),
       JSON.stringify(parsed.data.recentItems),
       JSON.stringify(parsed.data.collections),
     ],
