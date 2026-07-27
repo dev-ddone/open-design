@@ -13,15 +13,7 @@ import {
   type ReviewResponse,
 } from "../review-comments";
 
-interface PositionedPin {
-  comment: ReviewComment;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  number: number;
-}
-
+interface PositionedPin { comment: ReviewComment; left: number; top: number; width: number; height: number; number: number; }
 interface DragAnchor { commentId: string; x: number; y: number; }
 
 export function ReviewCommentPins() {
@@ -79,14 +71,7 @@ export function ReviewCommentPins() {
           }
         }
       }
-      return [{
-        comment,
-        left: bounds.left + Math.max(0, Math.min(1, x)) * bounds.width,
-        top: bounds.top + Math.max(0, Math.min(1, y)) * bounds.height,
-        width: Math.max(22, width * bounds.width),
-        height: Math.max(22, height * bounds.height),
-        number: index + 1,
-      }];
+      return [{ comment, left: bounds.left + Math.max(0, Math.min(1, x)) * bounds.width, top: bounds.top + Math.max(0, Math.min(1, y)) * bounds.height, width: Math.max(22, width * bounds.width), height: Math.max(22, height * bounds.height), number: index + 1 }];
     });
   }, [comments, canvasMap, layoutRevision, dragAnchor]);
 
@@ -127,11 +112,7 @@ export function ReviewCommentPins() {
       element.removeEventListener("pointercancel", end);
       const anchor = update(endEvent.clientX, endEvent.clientY);
       setDragAnchor(null);
-      await api("PATCH", `/api/designs/${activeDesign.id}/comments/${pin.comment.id}`, {
-        anchorX: anchor.x,
-        anchorY: anchor.y,
-        objectId: null,
-      }).catch(() => undefined);
+      await api("PATCH", `/api/designs/${activeDesign.id}/comments/${pin.comment.id}`, { anchorX: anchor.x, anchorY: anchor.y, objectId: null }).catch(() => undefined);
       notifyReviewCommentsChanged();
     };
     element.addEventListener("pointermove", move);
@@ -139,13 +120,9 @@ export function ReviewCommentPins() {
     element.addEventListener("pointercancel", end);
   };
 
-  return (
-    <div class="pointer-events-none fixed inset-0 z-[65]">
-      {pins.map((pin) => pin.comment.anchor_mode === "region" ? (
-        <button key={pin.comment.id} type="button" title="Trascina per spostare la regione" aria-label={`Apri regione commento ${pin.number}`} onPointerDown={(event) => startDrag(event as unknown as PointerEvent, pin)} onDoubleClick={() => focus(pin)} class="pointer-events-auto absolute rounded-lg border-2 border-violet-500 bg-violet-400/10 text-left cursor-move shadow-sm hover:bg-violet-400/20" style={{ left: `${pin.left}px`, top: `${pin.top}px`, width: `${pin.width}px`, height: `${pin.height}px` }}><span class="absolute -left-3 -top-3 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-violet-600 text-[9px] font-bold text-white shadow-lg">{pin.number}</span><span class="absolute bottom-1 right-1 rounded bg-violet-600/90 px-1.5 py-0.5 text-[7px] font-semibold text-white">{pin.comment.assigned_to_name ?? pin.comment.author_name}</span></button>
-      ) : (
-        <button key={pin.comment.id} type="button" title={`${pin.comment.author_name}: ${pin.comment.body} · trascina per riposizionare`} aria-label={`Apri commento ${pin.number}`} onPointerDown={(event) => startDrag(event as unknown as PointerEvent, pin)} onDoubleClick={() => focus(pin)} class="pointer-events-auto absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-violet-600 text-[9px] font-bold text-white shadow-lg cursor-move transition hover:scale-110 hover:bg-violet-700" style={{ left: `${pin.left}px`, top: `${pin.top}px` }}><MessageSquare size={11} class="absolute opacity-30" /><span class="relative">{pin.number}</span></button>
-      ))}
-    </div>
-  );
+  return <div class="pointer-events-none fixed inset-0 z-[65]">{pins.map((pin) => pin.comment.anchor_mode === "region" ? (
+    <button key={pin.comment.id} type="button" title="Trascina per spostare la regione" aria-label={`Apri regione commento ${pin.number}`} onPointerDown={(event) => startDrag(event as unknown as PointerEvent, pin)} onDblClick={() => focus(pin)} class="pointer-events-auto absolute rounded-lg border-2 border-violet-500 bg-violet-400/10 text-left cursor-move shadow-sm hover:bg-violet-400/20" style={{ left: `${pin.left}px`, top: `${pin.top}px`, width: `${pin.width}px`, height: `${pin.height}px` }}><span class="absolute -left-3 -top-3 grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-violet-600 text-[9px] font-bold text-white shadow-lg">{pin.number}</span><span class="absolute bottom-1 right-1 rounded bg-violet-600/90 px-1.5 py-0.5 text-[7px] font-semibold text-white">{pin.comment.assigned_to_name ?? pin.comment.author_name}</span></button>
+  ) : (
+    <button key={pin.comment.id} type="button" title={`${pin.comment.author_name}: ${pin.comment.body} · trascina per riposizionare`} aria-label={`Apri commento ${pin.number}`} onPointerDown={(event) => startDrag(event as unknown as PointerEvent, pin)} onDblClick={() => focus(pin)} class="pointer-events-auto absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-violet-600 text-[9px] font-bold text-white shadow-lg cursor-move transition hover:scale-110 hover:bg-violet-700" style={{ left: `${pin.left}px`, top: `${pin.top}px` }}><MessageSquare size={11} class="absolute opacity-30" /><span class="relative">{pin.number}</span></button>
+  ))}</div>;
 }
