@@ -6,6 +6,7 @@ import { LeftSidebar } from "./left-sidebar";
 import { RightPanel } from "./right-panel";
 import { PagesBar } from "./pages-bar";
 import { EditorContextMenu } from "./editor-context-menu";
+import { ElementPreferencesSync } from "./element-preferences-sync";
 import { useEditor } from "../context";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
@@ -15,6 +16,7 @@ export function Editor() {
 
   return (
     <div class="relative flex h-full w-full flex-col">
+      <ElementPreferencesSync />
       <Toolbar />
       <SelectionToolbar />
       <div class="flex flex-1 min-h-0">
