@@ -47,8 +47,14 @@ export interface InstalledPlugin {
   updated_at: string;
 }
 
-export function parsePluginManifest(value: string | Record<string, unknown>): StudioPluginManifest {
-  const manifest = (typeof value === "string" ? JSON.parse(value) : value) as Partial<StudioPluginManifest>;
+export function parsePluginManifest(value: unknown): StudioPluginManifest {
+  let decoded: unknown = value;
+  if (typeof value === "string") decoded = JSON.parse(value);
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+    throw new Error("Il manifest del plugin deve essere un oggetto JSON.");
+  }
+
+  const manifest = decoded as Partial<StudioPluginManifest>;
   if (manifest.schemaVersion !== 1) throw new Error("La versione schema del plugin deve essere 1.");
   if (!manifest.key || !/^[a-z0-9][a-z0-9._-]*$/.test(manifest.key)) throw new Error("Chiave plugin non valida.");
   if (!manifest.name?.trim() || !manifest.version?.trim()) throw new Error("Nome e versione sono obbligatori.");
