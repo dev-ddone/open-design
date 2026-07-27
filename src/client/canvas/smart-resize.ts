@@ -29,6 +29,16 @@ export interface SmartResizeResult {
   scaledObjects: number;
 }
 
+function dimensions(fromWidth: number, fromHeight: number, toWidth: number, toHeight: number) {
+  const safeFromWidth = Math.max(1, fromWidth);
+  const safeFromHeight = Math.max(1, fromHeight);
+  const width = Math.max(64, Math.round(toWidth));
+  const height = Math.max(64, Math.round(toHeight));
+  const ratioX = width / safeFromWidth;
+  const ratioY = height / safeFromHeight;
+  return { safeFromWidth, safeFromHeight, width, height, ratioX, ratioY, uniformScale: Math.min(ratioX, ratioY) };
+}
+
 export function smartResizeCanvas(
   canvas: fabric.Canvas,
   fromWidth: number,
@@ -37,13 +47,7 @@ export function smartResizeCanvas(
   toHeight: number,
   mode: SmartResizeMode,
 ): SmartResizeResult {
-  const safeFromWidth = Math.max(1, fromWidth);
-  const safeFromHeight = Math.max(1, fromHeight);
-  const width = Math.max(64, Math.round(toWidth));
-  const height = Math.max(64, Math.round(toHeight));
-  const ratioX = width / safeFromWidth;
-  const ratioY = height / safeFromHeight;
-  const uniformScale = Math.min(ratioX, ratioY);
+  const { safeFromWidth, safeFromHeight, width, height, ratioX, ratioY, uniformScale } = dimensions(fromWidth, fromHeight, toWidth, toHeight);
   let movedObjects = 0;
   let scaledObjects = 0;
 
@@ -87,8 +91,67 @@ export function smartResizeCanvas(
 
   canvas.setDimensions({ width, height });
   canvas.requestRenderAll();
-  for (const object of canvas.getObjects()) {
-    canvas.fire("object:modified", { target: object } as any);
-  }
+  for (const object of canvas.getObjects()) canvas.fire("object:modified", { target: object } as any);
   return { width, height, movedObjects, scaledObjects };
+}
+
+function resizeSerializedObject(
+  object: Record<string, any>,
+  input: ReturnType<typeof dimensions>,
+  mode: SmartResizeMode,
+): { moved: number; scaled: number } {
+  if (object._isBgImage) {
+    const intrinsicWidth = Math.max(1, Number(object.width) || input.safeFromWidth);
+    const intrinsicHeight = Math.max(1, Number(object.height) || input.safeFromHeight);
+    const cover = Math.max(input.width / intrinsicWidth, input.height / intrinsicHeight);
+    object.left = input.width / 2;
+    object.top = input.height / 2;
+    object.originX = "center";
+    object.originY = "center";
+    object.scaleX = cover;
+    object.scaleY = cover;
+    return { moved: 0, scaled: 1 };
+  }
+
+  object.left = Number(object.left ?? 0) * input.ratioX;
+  object.top = Number(object.top ?? 0) * input.ratioY;
+  let scaled = 0;
+  if (mode === "stretch") {
+    object.scaleX = Number(object.scaleX ?? 1) * input.ratioX;
+    object.scaleY = Number(object.scaleY ?? 1) * input.ratioY;
+    scaled = 1;
+  } else if (mode === "balanced") {
+    object.scaleX = Number(object.scaleX ?? 1) * input.uniformScale;
+    object.scaleY = Number(object.scaleY ?? 1) * input.uniformScale;
+    scaled = 1;
+  }
+  return { moved: 1, scaled };
+}
+
+export function smartResizeCanvasJson(
+  canvasJson: string,
+  fromWidth: number,
+  fromHeight: number,
+  toWidth: number,
+  toHeight: number,
+  mode: SmartResizeMode,
+): { canvasJson: string; result: SmartResizeResult } {
+  const parsed = JSON.parse(canvasJson || "{}") as { objects?: Array<Record<string, any>> };
+  const input = dimensions(fromWidth, fromHeight, toWidth, toHeight);
+  let movedObjects = 0;
+  let scaledObjects = 0;
+  for (const object of parsed.objects ?? []) {
+    const result = resizeSerializedObject(object, input, mode);
+    movedObjects += result.moved;
+    scaledObjects += result.scaled;
+  }
+  return {
+    canvasJson: JSON.stringify(parsed),
+    result: {
+      width: input.width,
+      height: input.height,
+      movedObjects,
+      scaledObjects,
+    },
+  };
 }
