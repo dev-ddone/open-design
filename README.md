@@ -8,7 +8,7 @@ A self-hosted, open-source static design workspace based on Open Design. It comb
 
 DDone Design focuses on social graphics, print layouts, presentations, brand-controlled templates and collaborative agency workflows. Video editing, audio, animated timelines, GIF animation tooling and 3D are intentionally outside scope.
 
-The current release is `2.8.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
+The current release is `2.10.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`docs/UX_COMPETITIVE_RESEARCH.md`](docs/UX_COMPETITIVE_RESEARCH.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
 
 ## Included
 
@@ -17,14 +17,17 @@ The current release is `2.8.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODU
 - **Realtime object-level collaboration** with presence and collaborator indicators.
 - **Persistent versions**, restore and safety snapshots.
 - **PNG, JPG, SVG and multi-page PDF export.**
+- **Governed export preflight** using audit errors, review state and unresolved comments.
 - **Client brand kits** and selectively editable templates.
 - **Layers, grouping, precision controls and keyboard shortcuts.**
 - **Editable smart tables, grids and frames.**
-- **Static Smart Resize** plus separate campaign variants with independent dimensions.
+- **Static Smart Resize** plus multi-format campaign creation with independent dimensions.
 - **Design Audit** for layout, template fields, brand, readability and attribution checks.
 - **Comments and approval states** associated with designs, pages and objects.
+- **Contextual review pins**, replies, filters and mention metadata.
 - **Semantic template fields** for text, price, CTA, images and logos.
 - **CSV data merge** for the current page and multipage generation.
+- **Searchable page grid** with large thumbnails and atomic drag ordering.
 - **Attribution reports** in CSV and Markdown.
 - **PostgreSQL** for accounts, ACLs, designs, versions, templates, reviews, preferences and collaboration state.
 - **S3/MinIO or local storage** for private uploads.
@@ -88,11 +91,13 @@ The editor includes:
 - dot, stripe, grid and checker patterns;
 - random blob and wave generators;
 - vector QR code generation;
-- static Smart Resize and campaign-copy creation;
+- static Smart Resize and multi-format campaign-copy creation;
 - semantic field definition and validation;
 - CSV page generation;
-- comments, review decisions and approval state;
-- automatic design/brand audit and attribution reporting.
+- comments, review pins, decisions and approval state;
+- automatic design/brand audit and attribution reporting;
+- permission-aware export preflight;
+- compact and full-screen multipage navigation.
 
 Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration. Some raster image effects intentionally produce a new raster result rather than a live editable filter stack.
 
@@ -158,7 +163,9 @@ pnpm check
 | Upload and reuse assets | Yes | Yes | Yes | No |
 | Comment on accessible designs | Yes | Yes | Yes | Yes |
 | Change review state | Yes | Yes | Yes | No |
-| View and export designs | Yes | Yes | Yes | Yes |
+| Reorder pages | Yes | Yes | Yes | No |
+| Override export blockers | Yes | Yes | Yes | No |
+| View and export clean designs | Yes | Yes | Yes | Yes |
 
 Every design, client, upload, private template and brand kit is scoped to an organization. API authorization is enforced server-side.
 
@@ -180,10 +187,11 @@ See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
 src/client
   Preact UI
   Fabric.js multi-page static editor
+  compact strip and searchable page grid
   layers, smart structures and precision tools
   federated Elements browser
   semantic template fields and CSV production
-  Smart Resize, review and Design Audit
+  Smart Resize, review, Design Audit and export preflight
   client ACL and brand-kit controls
   object-level Yjs collaboration
 
@@ -192,6 +200,7 @@ src/server
   JWT cookie authentication
   organization/client authorization
   review/comment and preference persistence
+  atomic page ordering
   federated provider adapters and secure media proxies
   automatic Openverse OAuth2 token lifecycle
   PostgreSQL persistence
