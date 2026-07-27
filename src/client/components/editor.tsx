@@ -15,6 +15,7 @@ import { RemotePresenceOverlay } from "./remote-presence-overlay";
 import { CollaborationStatusBanner } from "./collaboration-status-banner";
 import { PluginManager } from "./plugin-manager";
 import { StyleRecipesPanel } from "./style-recipes-panel";
+import { StyleRecipesLauncher } from "./style-recipes-launcher";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -24,6 +25,7 @@ export function Editor() {
       <ElementPreferencesSync />
       <Toolbar />
       <NotificationCenter />
+      <StyleRecipesLauncher />
       <CollaborationStatusBanner />
       <SelectionToolbar />
       <div class="flex flex-1 min-h-0">
