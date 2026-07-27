@@ -14,6 +14,7 @@ import { NotificationCenter } from "./notification-center";
 import { RemotePresenceOverlay } from "./remote-presence-overlay";
 import { CollaborationStatusBanner } from "./collaboration-status-banner";
 import { PluginManager } from "./plugin-manager";
+import { StyleRecipesPanel } from "./style-recipes-panel";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -38,6 +39,7 @@ export function Editor() {
       <AssetPickerHost />
       <CommandPalette />
       <PluginManager />
+      <StyleRecipesPanel />
       <CropPanel />
       <EditorContextMenu />
     </div>
