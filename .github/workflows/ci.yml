@@ -8,6 +8,7 @@ on:
       - feat/ddone-platform-foundation
       - feat/ddone-advanced-suite
       - feat/ddone-elements-universe
+      - feat/ddone-pro-elements-canvas-ux
 
 permissions:
   contents: read
@@ -71,6 +72,13 @@ jobs:
         run: |
           set -o pipefail
           pnpm typecheck 2>&1 | tee typecheck.log
+
+      - name: Unit and regression tests
+        id: unit-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee unit-tests.log
 
       - name: Openverse OAuth2 token lifecycle smoke test
         id: openverse-auth-smoke
@@ -181,6 +189,7 @@ jobs:
           path: |
             pnpm-lock.yaml
             typecheck.log
+            unit-tests.log
             openverse-auth-smoke.log
             frontend-build.log
             runtime.log
