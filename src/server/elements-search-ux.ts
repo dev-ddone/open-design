@@ -7,6 +7,7 @@ import {
   type CatalogFormat,
 } from "./local-asset-packs.js";
 import { searchStudioRasterPresets } from "./studio-raster-pack.js";
+import { searchExtraStudioRasterPresets } from "./studio-raster-pack-extra.js";
 
 const LOCAL_PROVIDERS = new Set(["local-structures", "local-tabler", "local-twemoji"]);
 const NON_PAGINATED_PROVIDERS = new Set(["iconify", "studio-raster"]);
@@ -68,8 +69,15 @@ function localProviderPage(input: { provider: string; query: string; category: C
 
 function rasterPage(input: { query: string; category: CatalogCategory; format: CatalogFormat; page: number; pageSize: number }): CatalogElement[] {
   if (input.page > 1 || input.format === "svg" || input.format === "jpg") return [];
-  return searchStudioRasterPresets({ q: input.query, category: input.category, limit: input.pageSize })
-    .filter((item) => input.format !== "png-transparent" || item.transparent);
+  const primary = searchStudioRasterPresets({ q: input.query, category: input.category, limit: input.pageSize });
+  const extra = searchExtraStudioRasterPresets({
+    q: input.query,
+    category: input.category,
+    limit: Math.max(0, input.pageSize - primary.length),
+  });
+  return [...primary, ...extra]
+    .filter((item) => input.format !== "png-transparent" || item.transparent)
+    .slice(0, input.pageSize);
 }
 
 /** Repairs provider pagination and enriches the default catalog with bundled real PNG assets. */
@@ -118,7 +126,7 @@ export const improveElementsSearch: MiddlewareHandler<{ Variables: AppVariables 
     providerList.unshift({
       id: "studio-raster",
       label: "DDone PNG Studio",
-      description: "PNG trasparenti, texture, ombre, sfondi e mockup inclusi",
+      description: "Oltre 45 PNG trasparenti, texture, ombre, sfondi, dispositivi e mockup inclusi",
       enabled: true,
       capabilities: ["image"],
       attribution: "Bundled MIT assets",
