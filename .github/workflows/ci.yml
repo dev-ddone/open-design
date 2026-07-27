@@ -182,6 +182,7 @@ jobs:
           node scripts/template-application-smoke.mjs 2>&1 | tee template-application-smoke.log
           node scripts/elements-universe-smoke.mjs cookies.txt login.json client.json 2>&1 | tee elements-universe-smoke.log
           node scripts/element-preferences-smoke.mjs cookies.txt login.json 2>&1 | tee element-preferences-smoke.log
+          node scripts/design-review-smoke.mjs cookies.txt login.json design.json 2>&1 | tee design-review-smoke.log
 
       - name: Build production image
         id: docker-build
@@ -208,6 +209,7 @@ jobs:
             template-application-smoke.log
             elements-universe-smoke.log
             element-preferences-smoke.log
+            design-review-smoke.log
             health.json
             login.json
             client.json
