@@ -22,6 +22,11 @@ export const STATIC_FORMAT_PRESETS: StaticFormatPreset[] = [
   { id: "presentation", label: "Presentazione 16:9", width: 1920, height: 1080, group: "Presentazioni" },
 ];
 
+export function buildResizeVariantPlan(presetIds: Iterable<string>): StaticFormatPreset[] {
+  const requested = new Set(presetIds);
+  return STATIC_FORMAT_PRESETS.filter((preset) => requested.has(preset.id));
+}
+
 export interface SmartResizeResult {
   width: number;
   height: number;
