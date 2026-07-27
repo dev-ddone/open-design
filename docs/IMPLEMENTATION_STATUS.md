@@ -1,6 +1,6 @@
 # Implementation status
 
-This document describes `feat/ddone-smart-elements-editor` at version `2.9.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
+This document describes `feat/ddone-smart-elements-editor` at version `2.10.0-alpha.1`. It separates code that exists from workflows proven by automated checks or repeatable acceptance tests.
 
 ## Status levels
 
@@ -12,7 +12,7 @@ This document describes `feat/ddone-smart-elements-editor` at version `2.9.0-alp
 
 ## Product maturity
 
-DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations, multi-format campaign creation and controlled review workflows. It is not yet a complete Canva replacement.
+DDone Design is an alpha static-design workspace for agencies and organizations. Its strongest areas are self-hosting, client separation, private assets, static editing, template/data foundations, multi-format campaign creation, contextual review, governed export and multipage document navigation. It is not yet a complete Canva replacement.
 
 ## Verified
 
@@ -51,6 +51,22 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Draft, in-review, changes-requested and approved transitions.
 - Runtime smoke coverage for comment anchors, anchor movement, mentions, resolution and approval persistence.
 
+### Export governance
+
+- Export preflight rules have unit coverage.
+- Audit errors and `CHANGES_REQUESTED` are treated as blockers.
+- Draft/in-review status, audit warnings and open comments are surfaced as notices.
+- Viewer/read-only sessions cannot bypass blockers.
+- Editor overrides are explicit.
+- Clean approved documents export without an extra confirmation dialog.
+
+### Page ordering
+
+- Complete-page order validation is enforced server-side.
+- Reorders are written atomically.
+- Incomplete or stale page lists return a conflict instead of dropping pages.
+- Runtime smoke coverage creates, reverses, reloads and verifies page order.
+
 ### Data and template utilities
 
 - Semantic field metadata is serialized with Fabric objects.
@@ -64,8 +80,9 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Node unit and regression tests.
 - Multi-format resize planning tests.
 - Comment mention and coordinate normalization tests.
+- Export governance tests.
 - Openverse and Wikimedia smoke tests.
-- Runtime API, Elements, template, version, review and realtime smoke tests.
+- Runtime API, Elements, template, version, review, page-order and realtime smoke tests.
 - Preference persistence smoke test.
 - Frontend and production Docker builds.
 
@@ -83,6 +100,15 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - SVG palette editing.
 - PNG, JPG, SVG and multi-page PDF export paths.
 
+### Multipage navigation
+
+- Compact horizontal page strip.
+- Full-screen searchable page grid.
+- Client-side page thumbnails.
+- Direct open, rename, duplicate, delete and add actions.
+- Desktop drag-and-drop ordering with server persistence.
+- Viewer-safe read-only overview.
+
 ### Static productivity
 
 - Smart Resize for common social, print and presentation formats.
@@ -90,6 +116,7 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Recently used resize presets.
 - Batch campaign copies created as independent designs with their own dimensions.
 - Design Audit for page bounds, semantic template fields, text size, brand fonts/colors, layer naming and attribution.
+- Export preflight linked directly to Design Audit and Review.
 - CSV and Markdown attribution reports.
 - Semantic template fields for text, price, CTA, image and logo.
 - Apply one CSV record to the open page.
@@ -121,9 +148,16 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 ### Design Audit and governance
 
 - It reports and selects problematic objects.
-- It exports attribution data.
-- It does not yet repair issues or block export/approval automatically.
+- It exports attribution data and participates in export preflight.
+- It does not automatically repair issues.
+- Editor override decisions are not yet written to a persistent audit log.
 - Contrast analysis and complete WCAG validation are not yet implemented.
+
+### Multipage navigation
+
+- Desktop drag-and-drop is implemented.
+- Dedicated keyboard and touch ordering controls remain pending.
+- Thumbnails are generated in the browser and are not cached as persistent preview assets.
 
 ### Templates and brand kits
 
@@ -145,7 +179,7 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Comments render as pins and can target objects or pages.
 - Pins cannot yet be freely dragged or attached to rectangular regions.
 - Mentions are stored and displayed, but notification delivery is pending.
-- Approval does not currently enforce an export gate.
+- Approval and audit participate in export preflight, but no persistent governance log exists.
 - No unread-state or reviewer-assignment notification center yet.
 
 ### Preferences and collections
@@ -163,7 +197,7 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 
 - No Playwright editor journey suite yet.
 - No screenshot visual-regression or export golden-file suite yet.
-- Keyboard-only, WCAG and tablet acceptance coverage remain incomplete.
+- Keyboard-only, WCAG, touch and tablet acceptance coverage remain incomplete.
 - The stacked PR history must be consolidated before a stable release.
 
 ## Planned
@@ -171,10 +205,10 @@ DDone Design is an alpha static-design workspace for agencies and organizations.
 - Native XLSX import, record preview and column mapping.
 - Data-bound editable tables and charts.
 - Batch export for generated pages and campaign variants.
-- Export gates based on approval status and audit errors.
+- Persistent governance log for export overrides and approvals.
 - Drag-to-position comment pins and comment regions.
 - Mention, assignment and approval notifications.
-- Thumbnail/grid page overview for large documents.
+- Keyboard/touch page reordering and persistent thumbnail cache.
 - Integrated asset picker for semantic image/logo replacement.
 - One-click brand migration and logo replacement.
 - Playwright and visual/export regression suites.
