@@ -16,13 +16,15 @@ export async function openFreshDesign(page: Page): Promise<void> {
   await page.getByRole("button", { name: "New Design", exact: true }).click();
   await page.waitForURL(/\/design\//);
   const canvas = page.locator("canvas").first();
-  if (!(await canvas.isVisible().catch(() => false))) {
+  try {
+    await canvas.waitFor({ state: "visible", timeout: 2_500 });
+  } catch {
     const addPage = page.getByRole("button", { name: /Add page|Aggiungi pagina/i }).first();
     await expect(addPage).toBeVisible();
     await addPage.click();
+    await expect(canvas).toBeVisible();
   }
-  await expect(canvas).toBeVisible();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(500);
 }
 
 export async function openCommand(page: Page, title: string): Promise<void> {
