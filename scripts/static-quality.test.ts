@@ -7,6 +7,7 @@ import {
   normalizeTemplateFieldKey,
   parseCsv,
 } from "../src/client/canvas/template-fields";
+import { buildExportPreflight } from "../src/client/export-governance";
 import { clampCommentAnchor, extractCommentMentions } from "../src/client/review-comments";
 
 test("normalizes supported design colors", () => {
@@ -41,6 +42,40 @@ test("extracts unique review mentions and clamps pin coordinates", () => {
   assert.equal(clampCommentAnchor(-0.5), 0);
   assert.equal(clampCommentAnchor(1.5), 1);
   assert.equal(clampCommentAnchor(Number.NaN), null);
+});
+
+test("blocks viewer export when audit or review has blockers", () => {
+  const result = buildExportPreflight({
+    reviewStatus: "CHANGES_REQUESTED",
+    auditErrors: 2,
+    auditWarnings: 1,
+    openComments: 3,
+    readOnly: true,
+  });
+  assert.equal(result.blockers.length, 2);
+  assert.equal(result.canOverride, false);
+  assert.equal(result.canExportImmediately, false);
+});
+
+test("allows explicit editor override and immediate clean approved export", () => {
+  const warning = buildExportPreflight({
+    reviewStatus: "DRAFT",
+    auditErrors: 0,
+    auditWarnings: 1,
+    openComments: 0,
+    readOnly: false,
+  });
+  assert.equal(warning.canOverride, true);
+  assert.equal(warning.canExportImmediately, false);
+
+  const clean = buildExportPreflight({
+    reviewStatus: "APPROVED",
+    auditErrors: 0,
+    auditWarnings: 0,
+    openComments: 0,
+    readOnly: true,
+  });
+  assert.equal(clean.canExportImmediately, true);
 });
 
 test("normalizes semantic field keys", () => {
