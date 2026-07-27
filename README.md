@@ -2,13 +2,13 @@
 
 # DDone Design
 
-A self-hosted, open-source static design workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and integrated creative tools.
+A self-hosted, open-source static design workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and agency review/data workflows.
 
 ## Static product scope
 
 DDone Design focuses on social graphics, print layouts, presentations, brand-controlled templates and collaborative agency workflows. Video editing, audio, animated timelines, GIF animation tooling and 3D are intentionally outside scope.
 
-The current release is `2.6.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
+The current release is `2.8.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
 
 ## Included
 
@@ -20,9 +20,13 @@ The current release is `2.6.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODU
 - **Client brand kits** and selectively editable templates.
 - **Layers, grouping, precision controls and keyboard shortcuts.**
 - **Editable smart tables, grids and frames.**
-- **Static Smart Resize** for common social, print and presentation formats.
-- **Design Audit** for layout, brand, readability and attribution checks.
-- **PostgreSQL** for accounts, ACLs, designs, versions, templates, preferences and collaboration state.
+- **Static Smart Resize** plus separate campaign variants with independent dimensions.
+- **Design Audit** for layout, template fields, brand, readability and attribution checks.
+- **Comments and approval states** associated with designs, pages and objects.
+- **Semantic template fields** for text, price, CTA, images and logos.
+- **CSV data merge** for the current page and multipage generation.
+- **Attribution reports** in CSV and Markdown.
+- **PostgreSQL** for accounts, ACLs, designs, versions, templates, reviews, preferences and collaboration state.
 - **S3/MinIO or local storage** for private uploads.
 - **Docker Compose and Coolify deployment** with health checks and automatic migrations.
 
@@ -71,7 +75,7 @@ For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVER
 
 `OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. No scheduled task, cron job or persistent token storage is required. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
 
-## Creative and quality tools
+## Creative, template and quality tools
 
 The editor includes:
 
@@ -84,8 +88,11 @@ The editor includes:
 - dot, stripe, grid and checker patterns;
 - random blob and wave generators;
 - vector QR code generation;
-- static Smart Resize;
-- automatic design and brand audit.
+- static Smart Resize and campaign-copy creation;
+- semantic field definition and validation;
+- CSV page generation;
+- comments, review decisions and approval state;
+- automatic design/brand audit and attribution reporting.
 
 Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration. Some raster image effects intentionally produce a new raster result rather than a live editable filter stack.
 
@@ -149,6 +156,8 @@ pnpm check
 | Create clients | Yes | Yes | Conditional | No |
 | Create and edit designs | Yes | Yes | Yes | No |
 | Upload and reuse assets | Yes | Yes | Yes | No |
+| Comment on accessible designs | Yes | Yes | Yes | Yes |
+| Change review state | Yes | Yes | Yes | No |
 | View and export designs | Yes | Yes | Yes | Yes |
 
 Every design, client, upload, private template and brand kit is scoped to an organization. API authorization is enforced server-side.
@@ -173,7 +182,8 @@ src/client
   Fabric.js multi-page static editor
   layers, smart structures and precision tools
   federated Elements browser
-  Smart Resize and Design Audit
+  semantic template fields and CSV production
+  Smart Resize, review and Design Audit
   client ACL and brand-kit controls
   object-level Yjs collaboration
 
@@ -181,6 +191,7 @@ src/server
   Hono API on Node.js
   JWT cookie authentication
   organization/client authorization
+  review/comment and preference persistence
   federated provider adapters and secure media proxies
   automatic Openverse OAuth2 token lifecycle
   PostgreSQL persistence
