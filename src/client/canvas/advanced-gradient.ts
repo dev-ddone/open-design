@@ -68,12 +68,16 @@ export function gradientToCss(input: GradientDefinition): string {
   return `linear-gradient(${definition.angle}deg, ${stops})`;
 }
 
-export function createFabricGradient(input: GradientDefinition, width: number, height: number): fabric.Gradient<"linear" | "radial"> {
+export function createFabricGradient(
+  input: GradientDefinition,
+  width: number,
+  height: number,
+): fabric.Gradient<"linear", "linear"> | fabric.Gradient<"radial", "radial"> {
   const definition = normalizeGradient(input);
   const colorStops = definition.stops.map((stop) => ({ offset: stop.offset, color: rgba(stop.color, stop.opacity) }));
   if (definition.kind === "radial") {
     const radius = Math.max(1, Math.max(width, height) * definition.radius);
-    return new fabric.Gradient({
+    return new fabric.Gradient<"radial", "radial">({
       type: "radial",
       gradientUnits: "pixels",
       coords: {
@@ -93,7 +97,7 @@ export function createFabricGradient(input: GradientDefinition, width: number, h
   const extent = Math.abs(width * dx) + Math.abs(height * dy);
   const centreX = width / 2;
   const centreY = height / 2;
-  return new fabric.Gradient({
+  return new fabric.Gradient<"linear", "linear">({
     type: "linear",
     gradientUnits: "pixels",
     coords: {
