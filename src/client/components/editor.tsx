@@ -12,6 +12,7 @@ import { AssetPickerHost } from "./asset-picker-host";
 import { CommandPalette } from "./command-palette";
 import { NotificationCenter } from "./notification-center";
 import { RemotePresenceOverlay } from "./remote-presence-overlay";
+import { CollaborationStatusBanner } from "./collaboration-status-banner";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -21,6 +22,7 @@ export function Editor() {
       <ElementPreferencesSync />
       <Toolbar />
       <NotificationCenter />
+      <CollaborationStatusBanner />
       <SelectionToolbar />
       <div class="flex flex-1 min-h-0">
         <LeftSidebar />
