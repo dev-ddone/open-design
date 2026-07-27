@@ -7,11 +7,10 @@ import { RightPanel } from "./right-panel";
 import { PagesBar } from "./pages-bar";
 import { EditorContextMenu } from "./editor-context-menu";
 import { ElementPreferencesSync } from "./element-preferences-sync";
-import { useEditor } from "../context";
+import { ReviewCommentPins } from "./review-comment-pins";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
-  const { readOnly } = useEditor();
   useEditorShortcuts();
 
   return (
@@ -25,8 +24,9 @@ export function Editor() {
           <CanvasArea />
           <PagesBar />
         </div>
-        {!readOnly && <RightPanel />}
+        <RightPanel />
       </div>
+      <ReviewCommentPins />
       <CropPanel />
       <EditorContextMenu />
     </div>
