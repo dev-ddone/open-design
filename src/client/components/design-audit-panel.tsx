@@ -1,13 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { BadgeCheck, RefreshCw, ShieldAlert } from "lucide-preact";
+import { BadgeCheck, Download, FileText, RefreshCw, ShieldAlert } from "lucide-preact";
 import { api } from "../api";
+import {
+  attributionReportCsv,
+  attributionReportMarkdown,
+  collectAttributions,
+  downloadTextFile,
+} from "../canvas/attribution-report";
 import { auditDesign, type DesignAuditReport } from "../canvas/design-audit";
 import type { DDoneFabricObject } from "../canvas-model";
 import { useEditor } from "../context";
 import type { BrandKit } from "../types";
 
+function safeFilename(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "design";
+}
+
 export function DesignAuditPanel() {
-  const { canvas, canvasWidth, canvasHeight } = useEditor();
+  const { canvas, canvasWidth, canvasHeight, activeDesign } = useEditor();
   const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [selectedKitId, setSelectedKitId] = useState("");
   const [report, setReport] = useState<DesignAuditReport | null>(null);
@@ -63,6 +78,20 @@ export function DesignAuditPanel() {
     canvas.requestRenderAll();
   };
 
+  const downloadAttributions = (format: "csv" | "md") => {
+    if (!canvas) return;
+    const entries = collectAttributions(canvas);
+    const designName = activeDesign?.name ?? "Design";
+    const filename = `${safeFilename(designName)}-attributions.${format}`;
+    if (format === "csv") {
+      downloadTextFile(filename, attributionReportCsv(entries), "text/csv;charset=utf-8");
+    } else {
+      downloadTextFile(filename, attributionReportMarkdown(entries, designName), "text/markdown;charset=utf-8");
+    }
+  };
+
+  const attributionCount = canvas ? collectAttributions(canvas).length : 0;
+
   return (
     <aside class="flex h-full w-[300px] shrink-0 flex-col border-l border-zinc-200 bg-white">
       <div class="border-b border-zinc-200 p-4 pt-12">
@@ -70,7 +99,7 @@ export function DesignAuditPanel() {
           <BadgeCheck size={16} class="text-emerald-600" />
           <h2 class="m-0 text-xs font-semibold text-zinc-800">Controllo design</h2>
         </div>
-        <p class="m-0 text-[9px] leading-relaxed text-zinc-400">Verifica bordi pagina, leggibilità, font e colori del brand, nomi dei livelli e attribuzioni richieste.</p>
+        <p class="m-0 text-[9px] leading-relaxed text-zinc-400">Verifica layout, template, leggibilità, brand e attribuzioni richieste.</p>
       </div>
 
       <div class="flex-1 overflow-y-auto p-4">
@@ -85,6 +114,15 @@ export function DesignAuditPanel() {
         <button onClick={scan} class="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-[10px] font-semibold text-zinc-700 cursor-pointer hover:border-emerald-300">
           <RefreshCw size={13} /> Riesegui controllo
         </button>
+
+        <section class="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+          <div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2"><FileText size={13} class="text-zinc-500" /><strong class="text-[9px] text-zinc-700">Attribuzioni</strong></div><span class="text-[8px] text-zinc-400">{attributionCount}</span></div>
+          <p class="my-2 text-[8px] leading-relaxed text-zinc-400">Esporta sorgente, autore, licenza e testo richiesto dalle risorse usate nella pagina.</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button onClick={() => downloadAttributions("csv")} class="flex h-8 items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white text-[8px] text-zinc-600 cursor-pointer"><Download size={11} /> CSV</button>
+            <button onClick={() => downloadAttributions("md")} class="flex h-8 items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white text-[8px] text-zinc-600 cursor-pointer"><Download size={11} /> Markdown</button>
+          </div>
+        </section>
 
         {report && (
           <>
