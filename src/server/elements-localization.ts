@@ -72,9 +72,9 @@ export function expandItalianQuery(input: string, category?: string): string {
       return replacement;
     });
   }
+  if (!changed) return input;
   const hint = CATEGORY_HINTS[category ?? ""];
   const expanded = `${result} ${hint ?? ""}`.trim();
-  if (!changed && !hint) return input;
   return [...new Set(expanded.split(/\s+/).filter(Boolean))].join(" ").slice(0, 260);
 }
 
