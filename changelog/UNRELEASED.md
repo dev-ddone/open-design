@@ -2,12 +2,14 @@
 
 ## Planned
 
-- semantic template placeholders and required-field validation;
-- object comments, mentions and approval workflow;
-- data-bound tables and charts plus CSV/XLSX bulk creation;
-- Playwright and visual regression coverage;
+- native XLSX import;
+- live data-bound tables and charts;
+- batch export for generated pages and records;
+- Playwright editor journeys and screenshot visual regression;
 - export fidelity and golden-file suite;
-- automated attribution report during export;
-- linked campaign variants generated from Smart Resize.
+- approval/audit export gates;
+- canvas comment pins, mentions and notifications;
+- live-linked campaign variants;
+- plugin/extension SDK and public integration contracts.
 
 Do not list video, audio, animated timeline or 3D work here: those areas are outside product scope.
