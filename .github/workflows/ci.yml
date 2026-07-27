@@ -206,8 +206,8 @@ jobs:
             sleep 1
           done
           set -o pipefail
-          pnpm test:e2e 2>&1 | tee playwright-e2e.log
-          pnpm test:visual 2>&1 | tee playwright-visual.log
+          BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-updated pnpm test:e2e 2>&1 | tee playwright-e2e.log
+          BOOTSTRAP_ADMIN_PASSWORD=ci-admin-password-updated pnpm test:visual 2>&1 | tee playwright-visual.log
 
       - name: Build production image
         id: docker-build
