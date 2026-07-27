@@ -53,6 +53,7 @@ jobs:
           version: 10.34.5
           run_install: false
       - run: pnpm install --no-frozen-lockfile --reporter=append-only
+      - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - name: Generate baselines
         shell: bash
