@@ -1,13 +1,32 @@
 import { useMemo, useState } from "preact/hooks";
-import { Maximize2 } from "lucide-preact";
+import { CopyPlus, Maximize2 } from "lucide-preact";
+import { api } from "../api";
 import { useEditor } from "../context";
-import { STATIC_FORMAT_PRESETS, smartResizeCanvas, type SmartResizeMode } from "../canvas/smart-resize";
+import {
+  STATIC_FORMAT_PRESETS,
+  smartResizeCanvas,
+  smartResizeCanvasJson,
+  type SmartResizeMode,
+} from "../canvas/smart-resize";
+import type { Design } from "../types";
 
 export function SmartResizePanel() {
-  const { canvas, canvasWidth, canvasHeight, setCanvasSize } = useEditor();
+  const {
+    canvas,
+    canvasWidth,
+    canvasHeight,
+    setCanvasSize,
+    activeDesign,
+    activePage,
+    getCanvasJSON,
+    createVersion,
+    navigate,
+    refreshLibrary,
+  } = useEditor();
   const [width, setWidth] = useState(canvasWidth);
   const [height, setHeight] = useState(canvasHeight);
   const [mode, setMode] = useState<SmartResizeMode>("balanced");
+  const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const groups = useMemo(() => [...new Set(STATIC_FORMAT_PRESETS.map((preset) => preset.group))], []);
 
@@ -21,6 +40,41 @@ export function SmartResizePanel() {
     setMessage(`${result.movedObjects} elementi riposizionati, ${result.scaledObjects} ridimensionati.`);
   };
 
+  const createVariant = async () => {
+    if (!canvas || !activeDesign) {
+      setMessage("Apri un progetto prima di creare una variante.");
+      return;
+    }
+    setWorking(true);
+    try {
+      await createVersion("Before campaign variant", "manual");
+      const transformed = smartResizeCanvasJson(
+        getCanvasJSON(),
+        canvasWidth,
+        canvasHeight,
+        width,
+        height,
+        mode,
+      );
+      const preset = STATIC_FORMAT_PRESETS.find((item) => item.width === width && item.height === height);
+      const variant = await api<Design>("POST", "/api/designs", {
+        name: `${activeDesign.name} · ${preset?.label ?? `${width}×${height}`}`,
+        canvas_json: transformed.canvasJson,
+        width: transformed.result.width,
+        height: transformed.result.height,
+        client_id: activeDesign.client_id ?? null,
+        template_id: activeDesign.template_id ?? null,
+      });
+      await refreshLibrary();
+      setMessage(`Variante ${variant.name} creata come progetto separato.`);
+      navigate(`/design/${variant.id}`);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Variante non creata");
+    } finally {
+      setWorking(false);
+    }
+  };
+
   return (
     <aside class="flex h-full w-[300px] shrink-0 flex-col border-l border-zinc-200 bg-white">
       <div class="border-b border-zinc-200 p-4 pt-12">
@@ -28,7 +82,7 @@ export function SmartResizePanel() {
           <Maximize2 size={16} class="text-violet-600" />
           <h2 class="m-0 text-xs font-semibold text-zinc-800">Smart Resize</h2>
         </div>
-        <p class="m-0 text-[9px] leading-relaxed text-zinc-400">Adatta la pagina corrente ai formati statici mantenendo posizione relativa, proporzioni e sfondo.</p>
+        <p class="m-0 text-[9px] leading-relaxed text-zinc-400">Adatta la pagina corrente oppure crea una variante statica separata per la campagna.</p>
       </div>
 
       <div class="flex-1 overflow-y-auto p-4">
@@ -70,9 +124,13 @@ export function SmartResizePanel() {
           </select>
         </label>
 
-        <button onClick={apply} class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-0 bg-gradient-to-r from-violet-600 to-fuchsia-500 text-xs font-semibold text-white cursor-pointer">
-          <Maximize2 size={15} /> Applica alla pagina
+        <button disabled={working} onClick={apply} class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-0 bg-gradient-to-r from-violet-600 to-fuchsia-500 text-xs font-semibold text-white cursor-pointer disabled:opacity-40">
+          <Maximize2 size={15} /> Modifica pagina corrente
         </button>
+        <button disabled={working || !activeDesign || !activePage} onClick={() => void createVariant()} class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 text-[10px] font-semibold text-violet-700 cursor-pointer disabled:opacity-40">
+          <CopyPlus size={14} /> Crea variante come progetto
+        </button>
+        <p class="mt-2 text-[8px] leading-relaxed text-zinc-400">La variante conserva il progetto originale e viene creata con dimensioni proprie. Per modifiche precise resta necessaria una revisione manuale del layout.</p>
         {message && <p class="mt-2 rounded-lg bg-zinc-50 p-2 text-[9px] text-zinc-500">{message}</p>}
       </div>
     </aside>
