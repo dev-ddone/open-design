@@ -1,0 +1,2 @@
+DDone Design 2.9 final validation trigger
+Release metadata, contextual review pins and multi-format resize.
