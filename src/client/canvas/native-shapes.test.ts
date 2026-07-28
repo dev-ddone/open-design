@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EXTRA_OBJECT_PROPERTIES } from "../canvas-model";
+import { configureNativeShapeControls } from "./native-shape-controls";
 import { chartSeriesFor, type SmartChartData } from "./smart-elements";
-import { createNativeShapeData, dashArrayFor, normalizeNativeShapeData } from "./native-shapes";
+import { buildNativeShape, createNativeShapeData, dashArrayFor, normalizeNativeShapeData } from "./native-shapes";
 
 test("native shape defaults remain persistent and bounded", () => {
   const data = createNativeShapeData("star", "#123456");
@@ -22,6 +23,39 @@ test("stroke presets create distinct dash sequences", () => {
   assert.deepEqual(dashArrayFor({ strokeStyle: "dashed", strokeWidth: 4, customDash: [] }), [10, 6]);
   assert.deepEqual(dashArrayFor({ strokeStyle: "dotted", strokeWidth: 4, customDash: [] }), [0.01, 7.2]);
   assert.deepEqual(dashArrayFor({ strokeStyle: "custom", strokeWidth: 4, customDash: [12, 5, 2] }), [12, 5, 2]);
+});
+
+test("shape-specific canvas handles are attached", () => {
+  const arc = buildNativeShape(createNativeShapeData("arc"));
+  configureNativeShapeControls(arc);
+  assert.ok(arc.controls.ddoneArcStart);
+  assert.ok(arc.controls.ddoneArcEnd);
+
+  const progress = buildNativeShape(createNativeShapeData("progress-ring"));
+  configureNativeShapeControls(progress);
+  assert.ok(progress.controls.ddoneArcStart);
+  assert.ok(progress.controls.ddoneProgress);
+
+  const star = buildNativeShape(createNativeShapeData("star"));
+  configureNativeShapeControls(star);
+  assert.ok(star.controls.ddoneInner);
+});
+
+test("gradient handles match the fill mode", () => {
+  const linearData = createNativeShapeData("rounded-rect");
+  linearData.fillMode = "linear";
+  const linear = buildNativeShape(linearData);
+  configureNativeShapeControls(linear);
+  assert.ok(linear.controls.ddoneGradientStart);
+  assert.ok(linear.controls.ddoneGradientEnd);
+  assert.ok(linear.controls.ddoneRadius);
+
+  const radialData = createNativeShapeData("circle");
+  radialData.fillMode = "radial";
+  const radial = buildNativeShape(radialData);
+  configureNativeShapeControls(radial);
+  assert.ok(radial.controls.ddoneGradientCenter);
+  assert.ok(radial.controls.ddoneGradientRadius);
 });
 
 test("legacy single-series charts are upgraded without losing data", () => {
