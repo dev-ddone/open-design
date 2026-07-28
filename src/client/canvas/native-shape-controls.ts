@@ -7,7 +7,7 @@ type PendingShape = NativeShapeObject & { __ddonePendingNativeShapeData?: Native
 type LocalPointResolver = (data: NativeShapeData, object: fabric.FabricObject) => fabric.Point;
 type DataUpdater = (data: NativeShapeData, point: fabric.Point, object: fabric.FabricObject) => NativeShapeData;
 
-const CONTROL_KEYS = ["ddoneRadius", "ddoneArcStart", "ddoneArcEnd", "ddoneProgress", "ddoneInner", "ddoneGradientStart", "ddoneGradientEnd", "ddoneGradientCenter", "ddoneGradientRadius"] as const;
+const CONTROL_KEYS = ["ddoneRadius", "ddonePoints", "ddoneArcStart", "ddoneArcEnd", "ddoneProgress", "ddoneInner", "ddoneGradientStart", "ddoneGradientEnd", "ddoneGradientCenter", "ddoneGradientRadius"] as const;
 
 function renderHandle(
   context: CanvasRenderingContext2D,
@@ -127,6 +127,14 @@ export function configureNativeShapeControls(object: fabric.FabricObject | null 
     );
   }
 
+  if (data.kind === "polygon" || data.kind === "star") {
+    controls.ddonePoints = dataControl(
+      (current, target) => new fabric.Point(target.width ?? current.width, ((current.points - 3) / 21) * Math.max(1, target.height ?? current.height)),
+      (current, point, target) => ({ ...current, points: Math.round(3 + clamped(point.y / Math.max(1, target.height ?? current.height), 0, 1) * 21) }),
+      "ns-resize",
+    );
+  }
+
   if (data.kind === "arc" || data.kind === "progress-ring") {
     controls.ddoneArcStart = dataControl(
       (current, target) => polarPoint(target, current.startAngle),
@@ -146,16 +154,18 @@ export function configureNativeShapeControls(object: fabric.FabricObject | null 
     );
   }
 
-  if (data.kind === "star") {
+  if (data.kind === "star" || data.kind === "ring") {
     controls.ddoneInner = dataControl(
-      (current, target) => polarPoint(target, -90, clamped(current.innerRadius, .08, .92) * .45),
+      (current, target) => polarPoint(target, 0, clamped(current.innerRadius, .08, .95) * .45),
       (current, point, target) => {
         const center = centerFor(target);
         const distance = Math.hypot(point.x - center.x, point.y - center.y);
         const outer = Math.max(1, Math.min(target.width ?? 1, target.height ?? 1) * .45);
-        return { ...current, innerRadius: clamped(distance / outer, .08, .92) };
+        const innerRadius = clamped(distance / outer, .08, .95);
+        if (current.kind === "ring") return { ...current, innerRadius, strokeWidth: Math.max(1, outer * (1 - innerRadius)) };
+        return { ...current, innerRadius };
       },
-      "ns-resize",
+      "ew-resize",
     );
   }
 
