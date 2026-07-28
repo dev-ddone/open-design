@@ -1,3 +1,4 @@
+import type * as fabric from "fabric";
 import { useMemo, useState } from "preact/hooks";
 import { BarChart3, Circle, CornerDownRight, Hexagon, MessageSquare, Minus, MoveRight, Parentheses, RectangleHorizontal, Sparkles, Star, Triangle } from "lucide-preact";
 import { buildNativeShape, createNativeShapeData, NATIVE_SHAPE_GROUPS, NATIVE_SHAPE_LABELS, type NativeShapeKind, type NativeStrokeStyle } from "../canvas/native-shapes";
