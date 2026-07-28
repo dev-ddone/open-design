@@ -29,7 +29,27 @@ test("creates an editable progress ring", async ({ page }) => {
 
   const progress = page.getByLabel("Avanzamento");
   await expect(progress).toBeVisible();
-  await progress.fill("42");
+  await progress.evaluate((element) => {
+    const input = element as HTMLInputElement;
+    input.value = "42";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await page.getByRole("button", { name: "Applica modifiche", exact: true }).click();
   await expect(page.getByText("Forma aggiornata e sincronizzata.", { exact: true })).toBeVisible();
+});
+
+test("creates a multi-series chart and changes its renderer", async ({ page }) => {
+  await openFreshDesign(page);
+
+  await page.getByRole("button", { name: "Forme", exact: true }).click();
+  await page.getByRole("button").filter({ hasText: "Barre raggruppate" }).click();
+
+  const chartType = page.getByLabel("Tipo grafico");
+  await expect(chartType).toBeVisible();
+  await expect(chartType).toHaveValue("grouped-bar");
+  await chartType.selectOption("radar");
+  await page.getByRole("button", { name: "Serie", exact: true }).click();
+  await expect(page.getByDisplayValue("Serie 3")).toBeVisible();
+  await page.getByRole("button", { name: "Applica modifiche", exact: true }).click();
+  await expect(page.getByText("Elemento aggiornato e sincronizzato.", { exact: true })).toBeVisible();
 });
