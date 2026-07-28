@@ -2,6 +2,8 @@ import * as fabric from "fabric";
 import { ensureObjectId, markSvgObject, type DDoneFabricObject } from "../canvas-model";
 
 export type SmartElementType = "table" | "grid" | "frame" | "chart" | "module";
+export type SmartChartType = "bar" | "grouped-bar" | "stacked-bar" | "line" | "area" | "donut" | "pie" | "radar" | "progress";
+export type SmartChartValueFormat = "number" | "percent" | "currency";
 
 export interface SmartTableData {
   type: "table"; variant: string; rows: number; columns: number; cells: string[]; header: boolean;
@@ -17,22 +19,32 @@ export interface SmartFrameData {
   type: "frame"; variant: string; width: number; height: number; radius: number;
   borderColor: string; borderWidth: number; backgroundColor: string; imageUrl?: string;
 }
+export interface SmartChartSeries {
+  name: string;
+  values: number[];
+  color: string;
+}
 export interface SmartChartData {
   type: "chart";
   variant: string;
-  chartType: "bar" | "line" | "donut";
+  chartType: SmartChartType;
   width: number;
   height: number;
   title: string;
   labels: string[];
   values: number[];
   colors: string[];
+  series?: SmartChartSeries[];
   backgroundColor: string;
   textColor: string;
   gridColor: string;
   showLegend: boolean;
   showValues: boolean;
+  showGrid?: boolean;
   rounded: boolean;
+  valueFormat?: SmartChartValueFormat;
+  currencySymbol?: string;
+  maxValue?: number;
 }
 export interface SmartModuleData {
   type: "module";
@@ -88,9 +100,26 @@ function createGridData(variant: string, color: string): SmartGridData {
 function createFrameData(variant: string, color: string): SmartFrameData {
   return { type: "frame", variant, width: 520, height: 380, radius: variant === "frame-rounded" ? 48 : variant === "frame-photo" ? 6 : 22, borderColor: color, borderWidth: variant === "frame-double" ? 8 : 14, backgroundColor: "#f4f4f5" };
 }
+function chartTypeForVariant(variant: string): SmartChartType {
+  if (variant.includes("progress")) return "progress";
+  if (variant.includes("radar")) return "radar";
+  if (variant.includes("stacked")) return "stacked-bar";
+  if (variant.includes("grouped")) return "grouped-bar";
+  if (variant.includes("area")) return "area";
+  if (variant.includes("line")) return "line";
+  if (variant.includes("pie")) return "pie";
+  if (variant.includes("donut")) return "donut";
+  return "bar";
+}
 function createChartData(variant: string, color: string): SmartChartData {
-  const chartType: SmartChartData["chartType"] = variant.includes("line") ? "line" : variant.includes("donut") || variant.includes("pie") ? "donut" : "bar";
-  return { type: "chart", variant, chartType, width: 620, height: 420, title: variant.includes("progress") ? "Avanzamento progetto" : "Risultati", labels: ["Gen", "Feb", "Mar", "Apr", "Mag"], values: [32, 58, 46, 82, 68], colors: [color, "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b"], backgroundColor: "#ffffff", textColor: color, gridColor: "#e4e4e7", showLegend: chartType === "donut", showValues: true, rounded: true };
+  const chartType = chartTypeForVariant(variant);
+  const labels = ["Gen", "Feb", "Mar", "Apr", "Mag"];
+  const values = [32, 58, 46, 82, 68];
+  const colors = [color, "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b"];
+  const series = chartType === "grouped-bar" || chartType === "stacked-bar" || chartType === "line" || chartType === "area"
+    ? [{ name: "Serie A", values, color }, { name: "Serie B", values: [24, 44, 62, 56, 78], color: colors[1] }]
+    : [{ name: "Serie A", values, color }];
+  return { type: "chart", variant, chartType, width: 620, height: 420, title: chartType === "progress" ? "Avanzamento progetto" : "Risultati", labels, values, colors, series, backgroundColor: "#ffffff", textColor: "#18181b", gridColor: "#e4e4e7", showLegend: ["donut", "pie", "grouped-bar", "stacked-bar", "line", "area"].includes(chartType), showValues: true, showGrid: !["donut", "pie", "progress"].includes(chartType), rounded: true, valueFormat: chartType === "progress" ? "percent" : "number", currencySymbol: "€", maxValue: 100 };
 }
 function createModuleData(variant: string, color: string): SmartModuleData {
   const presets: Record<string, Partial<SmartModuleData>> = {
@@ -115,7 +144,7 @@ function tableObjects(data: SmartTableData): fabric.FabricObject[] {
   if (data.header) objects.push(new fabric.Rect({ left: data.borderWidth / 2, top: data.borderWidth / 2, width: data.width - data.borderWidth, height: cellHeight - data.borderWidth / 2, rx: 16, ry: 16, fill: data.headerColor, opacity: .14, originX: "left", originY: "top", selectable: false, evented: false }));
   for (let row = 1; row < data.rows; row += 1) objects.push(new fabric.Line([0, row * cellHeight, data.width, row * cellHeight], { stroke: data.borderColor, strokeWidth: data.borderWidth, selectable: false, evented: false }));
   for (let column = 1; column < data.columns; column += 1) objects.push(new fabric.Line([column * cellWidth, 0, column * cellWidth, data.height], { stroke: data.borderColor, strokeWidth: data.borderWidth, selectable: false, evented: false }));
-  data.cells.forEach((text, index) => { const row = Math.floor(index / data.columns); const column = index % data.columns; const cell = new fabric.Textbox(text, { left: column * cellWidth + 10, top: row * cellHeight + Math.max(8, (cellHeight - data.fontSize * 1.25) / 2), width: Math.max(20, cellWidth - 20), fontFamily: "Inter", fontSize: data.fontSize, fontWeight: data.header && row === 0 ? "700" : "400", fill: data.textColor, textAlign: column === data.columns - 1 && data.columns <= 3 ? "right" : "left", editable: true, originX: "left", originY: "top" }); (cell as any).ddoneSmartCellIndex = index; objects.push(cell); });
+  data.cells.forEach((text, index) => { const row = Math.floor(index / data.columns); const column = index % data.columns; const cell = new fabric.Textbox(text, { left: column * cellWidth + 10, top: row * cellHeight + Math.max(8, (cellHeight - data.fontSize * 1.25) / 2), width: Math.max(20, cellWidth - 20), fontFamily: "Inter", fontSize: data.fontSize, fontWeight: data.header && row === 0 ? "700" : "400", fill: data.textColor, textAlign: column === data.columns - 1 && data.columns <= 3 ? "right" : "left", editable: true, originX: "left", originY: "top" }); (cell as fabric.Textbox & { ddoneSmartCellIndex?: number }).ddoneSmartCellIndex = index; objects.push(cell); });
   return objects;
 }
 
@@ -138,29 +167,69 @@ async function frameObjects(data: SmartFrameData): Promise<fabric.FabricObject[]
 
 function polar(cx: number, cy: number, radius: number, angle: number) { const radians = (angle - 90) * Math.PI / 180; return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) }; }
 function donutPath(cx: number, cy: number, outer: number, inner: number, start: number, end: number): string {
-  const a = polar(cx, cy, outer, end); const b = polar(cx, cy, outer, start); const c = polar(cx, cy, inner, start); const d = polar(cx, cy, inner, end); const large = end - start <= 180 ? 0 : 1;
+  const a = polar(cx, cy, outer, end); const b = polar(cx, cy, outer, start); const large = end - start <= 180 ? 0 : 1;
+  if (inner <= 0) return `M ${cx} ${cy} L ${a.x} ${a.y} A ${outer} ${outer} 0 ${large} 0 ${b.x} ${b.y} Z`;
+  const c = polar(cx, cy, inner, start); const d = polar(cx, cy, inner, end);
   return `M ${a.x} ${a.y} A ${outer} ${outer} 0 ${large} 0 ${b.x} ${b.y} L ${c.x} ${c.y} A ${inner} ${inner} 0 ${large} 1 ${d.x} ${d.y} Z`;
+}
+function arcStrokePath(cx: number, cy: number, radius: number, start: number, end: number): string {
+  const a = polar(cx, cy, radius, start); const b = polar(cx, cy, radius, end); const sweep = end - start; return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${sweep > 180 ? 1 : 0} 1 ${b.x} ${b.y}`;
+}
+
+export function chartSeriesFor(data: SmartChartData): SmartChartSeries[] {
+  const fallback = [{ name: "Serie A", values: data.values ?? [], color: data.colors?.[0] ?? "#7c3aed" }];
+  const source = Array.isArray(data.series) && data.series.length ? data.series : fallback;
+  return source.slice(0, 8).map((series, index) => ({ name: series.name || `Serie ${index + 1}`, values: Array.isArray(series.values) ? series.values.map((value) => Number(value) || 0) : [], color: series.color || data.colors?.[index] || "#7c3aed" }));
+}
+function formatChartValue(data: SmartChartData, value: number): string {
+  if (data.valueFormat === "percent") return `${Math.round(value * 10) / 10}%`;
+  if (data.valueFormat === "currency") return `${data.currencySymbol ?? "€"}${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(value)}`;
+  return new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(value);
+}
+function legendObjects(data: SmartChartData, series: SmartChartSeries[], startY = 90): fabric.FabricObject[] {
+  if (!data.showLegend) return [];
+  return series.flatMap((entry, index) => {
+    const y = startY + index * 30;
+    return [new fabric.Circle({ left: data.width - 170, top: y, radius: 6, fill: entry.color, selectable: false, evented: false }), new fabric.Textbox(entry.name, { left: data.width - 150, top: y - 2, width: 125, fontFamily: "Inter", fontSize: 12, fill: data.textColor, selectable: false, evented: false })];
+  });
 }
 function chartObjects(data: SmartChartData): fabric.FabricObject[] {
   const objects: fabric.FabricObject[] = [new fabric.Rect({ left: 0, top: 0, width: data.width, height: data.height, rx: data.rounded ? 24 : 0, ry: data.rounded ? 24 : 0, fill: data.backgroundColor, stroke: data.gridColor, strokeWidth: 2, originX: "left", originY: "top" })];
   objects.push(new fabric.Textbox(data.title, { left: 28, top: 22, width: data.width - 56, fontFamily: "Inter", fontSize: 24, fontWeight: "700", fill: data.textColor, editable: true }));
-  const chartLeft = 54, chartTop = 82, chartWidth = data.showLegend && data.chartType === "donut" ? data.width - 240 : data.width - 92, chartHeight = data.height - 140;
-  const max = Math.max(1, ...data.values.map((value) => Math.abs(value)));
-  if (data.chartType !== "donut") {
+  const series = chartSeriesFor(data);
+  const type = data.chartType ?? "bar";
+  const legendSpace = data.showLegend && !["donut", "pie", "progress"].includes(type) ? 155 : 0;
+  const chartLeft = 54, chartTop = 82, chartWidth = data.width - 92 - legendSpace, chartHeight = data.height - 140;
+  const allValues = series.flatMap((entry) => entry.values);
+  const max = Math.max(1, data.maxValue ?? 0, ...allValues.map((value) => Math.abs(value)));
+  const showGrid = data.showGrid !== false;
+  if (showGrid && !["donut", "pie", "progress", "radar"].includes(type)) {
     for (let line = 0; line <= 4; line += 1) objects.push(new fabric.Line([chartLeft, chartTop + (chartHeight * line) / 4, chartLeft + chartWidth, chartTop + (chartHeight * line) / 4], { stroke: data.gridColor, strokeWidth: 1, selectable: false, evented: false }));
   }
-  if (data.chartType === "bar") {
-    const slot = chartWidth / Math.max(1, data.values.length); const barWidth = slot * .58;
-    data.values.forEach((value, index) => { const h = (Math.abs(value) / max) * (chartHeight - 30); const x = chartLeft + index * slot + (slot - barWidth) / 2; const y = chartTop + chartHeight - h; objects.push(new fabric.Rect({ left: x, top: y, width: barWidth, height: h, rx: data.rounded ? 8 : 0, ry: data.rounded ? 8 : 0, fill: data.colors[index % data.colors.length], originX: "left", originY: "top", selectable: false, evented: false })); objects.push(new fabric.Textbox(data.labels[index] ?? `${index + 1}`, { left: chartLeft + index * slot, top: chartTop + chartHeight + 8, width: slot, fontFamily: "Inter", fontSize: 12, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); if (data.showValues) objects.push(new fabric.Textbox(String(value), { left: x, top: Math.max(chartTop, y - 22), width: barWidth, fontFamily: "Inter", fontSize: 12, fontWeight: "600", textAlign: "center", fill: data.textColor, selectable: false, evented: false })); });
-  } else if (data.chartType === "line") {
-    const points = data.values.map((value, index) => new fabric.Point(chartLeft + (chartWidth * index) / Math.max(1, data.values.length - 1), chartTop + chartHeight - (Math.abs(value) / max) * (chartHeight - 24)));
-    for (let index = 1; index < points.length; index += 1) objects.push(new fabric.Line([points[index - 1].x, points[index - 1].y, points[index].x, points[index].y], { stroke: data.colors[0], strokeWidth: 6, strokeLineCap: "round", selectable: false, evented: false }));
-    points.forEach((point, index) => { objects.push(new fabric.Circle({ left: point.x - 7, top: point.y - 7, radius: 7, fill: data.colors[index % data.colors.length], stroke: data.backgroundColor, strokeWidth: 3, selectable: false, evented: false })); if (data.showValues) objects.push(new fabric.Textbox(String(data.values[index]), { left: point.x - 24, top: point.y - 28, width: 48, fontFamily: "Inter", fontSize: 11, fontWeight: "600", textAlign: "center", fill: data.textColor, selectable: false, evented: false })); objects.push(new fabric.Textbox(data.labels[index] ?? `${index + 1}`, { left: point.x - 30, top: chartTop + chartHeight + 8, width: 60, fontFamily: "Inter", fontSize: 12, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); });
+  if (type === "bar") {
+    const values = series[0]?.values ?? []; const slot = chartWidth / Math.max(1, values.length); const barWidth = slot * .58;
+    values.forEach((value, index) => { const h = (Math.abs(value) / max) * (chartHeight - 30); const x = chartLeft + index * slot + (slot - barWidth) / 2; const y = chartTop + chartHeight - h; objects.push(new fabric.Rect({ left: x, top: y, width: barWidth, height: h, rx: data.rounded ? 8 : 0, ry: data.rounded ? 8 : 0, fill: series[0].color, originX: "left", originY: "top", selectable: false, evented: false })); objects.push(new fabric.Textbox(data.labels[index] ?? `${index + 1}`, { left: chartLeft + index * slot, top: chartTop + chartHeight + 8, width: slot, fontFamily: "Inter", fontSize: 12, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); if (data.showValues) objects.push(new fabric.Textbox(formatChartValue(data, value), { left: x - 8, top: Math.max(chartTop, y - 22), width: barWidth + 16, fontFamily: "Inter", fontSize: 11, fontWeight: "600", textAlign: "center", fill: data.textColor, selectable: false, evented: false })); });
+  } else if (type === "grouped-bar") {
+    const count = Math.max(1, data.labels.length); const slot = chartWidth / count; const groupWidth = slot * .76; const barWidth = groupWidth / Math.max(1, series.length);
+    data.labels.forEach((label, index) => { series.forEach((entry, seriesIndex) => { const value = entry.values[index] ?? 0; const h = (Math.abs(value) / max) * (chartHeight - 30); const x = chartLeft + index * slot + (slot - groupWidth) / 2 + seriesIndex * barWidth; const y = chartTop + chartHeight - h; objects.push(new fabric.Rect({ left: x, top: y, width: Math.max(3, barWidth - 3), height: h, rx: data.rounded ? 5 : 0, ry: data.rounded ? 5 : 0, fill: entry.color, selectable: false, evented: false })); }); objects.push(new fabric.Textbox(label, { left: chartLeft + index * slot, top: chartTop + chartHeight + 8, width: slot, fontFamily: "Inter", fontSize: 11, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); }); objects.push(...legendObjects(data, series));
+  } else if (type === "stacked-bar") {
+    const totals = data.labels.map((_, index) => series.reduce((sum, entry) => sum + Math.max(0, entry.values[index] ?? 0), 0)); const stackMax = Math.max(1, ...totals); const slot = chartWidth / Math.max(1, data.labels.length); const barWidth = slot * .58;
+    data.labels.forEach((label, index) => { let bottom = chartTop + chartHeight; series.forEach((entry) => { const value = Math.max(0, entry.values[index] ?? 0); const h = (value / stackMax) * (chartHeight - 30); bottom -= h; objects.push(new fabric.Rect({ left: chartLeft + index * slot + (slot - barWidth) / 2, top: bottom, width: barWidth, height: h, fill: entry.color, selectable: false, evented: false })); }); objects.push(new fabric.Textbox(label, { left: chartLeft + index * slot, top: chartTop + chartHeight + 8, width: slot, fontFamily: "Inter", fontSize: 11, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); if (data.showValues) objects.push(new fabric.Textbox(formatChartValue(data, totals[index]), { left: chartLeft + index * slot, top: Math.max(chartTop, bottom - 20), width: slot, fontFamily: "Inter", fontSize: 10, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); }); objects.push(...legendObjects(data, series));
+  } else if (type === "line" || type === "area") {
+    series.forEach((entry) => { const points = entry.values.map((value, index) => new fabric.Point(chartLeft + (chartWidth * index) / Math.max(1, entry.values.length - 1), chartTop + chartHeight - (Math.abs(value) / max) * (chartHeight - 24))); if (type === "area" && points.length > 1) objects.push(new fabric.Polygon([{ x: points[0].x, y: chartTop + chartHeight }, ...points.map((point) => ({ x: point.x, y: point.y })), { x: points[points.length - 1].x, y: chartTop + chartHeight }], { fill: entry.color, opacity: .18, selectable: false, evented: false })); for (let index = 1; index < points.length; index += 1) objects.push(new fabric.Line([points[index - 1].x, points[index - 1].y, points[index].x, points[index].y], { stroke: entry.color, strokeWidth: 5, strokeLineCap: "round", selectable: false, evented: false })); points.forEach((point, index) => { objects.push(new fabric.Circle({ left: point.x - 5, top: point.y - 5, radius: 5, fill: entry.color, stroke: data.backgroundColor, strokeWidth: 2, selectable: false, evented: false })); if (data.showValues && series.length === 1) objects.push(new fabric.Textbox(formatChartValue(data, entry.values[index] ?? 0), { left: point.x - 28, top: point.y - 25, width: 56, fontFamily: "Inter", fontSize: 10, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); }); }); data.labels.forEach((label, index) => { const x = chartLeft + (chartWidth * index) / Math.max(1, data.labels.length - 1); objects.push(new fabric.Textbox(label, { left: x - 30, top: chartTop + chartHeight + 8, width: 60, fontFamily: "Inter", fontSize: 11, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); }); objects.push(...legendObjects(data, series));
+  } else if (type === "donut" || type === "pie") {
+    const values = series[0]?.values ?? []; const total = Math.max(1, values.reduce((sum, value) => sum + Math.max(0, value), 0)); const cx = data.showLegend ? data.width * .38 : data.width / 2; const cy = chartTop + chartHeight / 2; const outer = Math.min(data.showLegend ? data.width * .5 : data.width, chartHeight) * .38; const inner = type === "donut" ? outer * .58 : 0; let angle = 0;
+    values.forEach((value, index) => { const sweep = (Math.max(0, value) / total) * 360; objects.push(new fabric.Path(donutPath(cx, cy, outer, inner, angle, angle + Math.max(.5, sweep - 1)), { fill: data.colors[index % data.colors.length] ?? series[0].color, strokeWidth: 0, selectable: false, evented: false })); angle += sweep; });
+    if (type === "donut") objects.push(new fabric.Textbox(formatChartValue(data, total), { left: cx - inner, top: cy - 18, width: inner * 2, fontFamily: "Inter", fontSize: 25, fontWeight: "700", textAlign: "center", fill: data.textColor, selectable: false, evented: false }));
+    if (data.showLegend) data.labels.forEach((label, index) => { const x = data.width - 190; const y = 92 + index * 36; objects.push(new fabric.Circle({ left: x, top: y, radius: 6, fill: data.colors[index % data.colors.length] ?? series[0].color, selectable: false, evented: false })); objects.push(new fabric.Textbox(`${label}${data.showValues ? ` · ${formatChartValue(data, values[index] ?? 0)}` : ""}`, { left: x + 20, top: y - 2, width: 150, fontFamily: "Inter", fontSize: 12, fill: data.textColor, selectable: false, evented: false })); });
+  } else if (type === "radar") {
+    const count = Math.max(3, data.labels.length); const cx = chartLeft + chartWidth / 2; const cy = chartTop + chartHeight / 2; const radius = Math.min(chartWidth, chartHeight) * .39;
+    for (let ring = 1; ring <= 4; ring += 1) { const ringPoints = Array.from({ length: count }, (_, index) => polar(cx, cy, radius * ring / 4, index * 360 / count)); objects.push(new fabric.Polygon(ringPoints, { fill: "rgba(0,0,0,0)", stroke: data.gridColor, strokeWidth: 1, selectable: false, evented: false })); }
+    data.labels.forEach((label, index) => { const edge = polar(cx, cy, radius, index * 360 / count); const text = polar(cx, cy, radius + 23, index * 360 / count); objects.push(new fabric.Line([cx, cy, edge.x, edge.y], { stroke: data.gridColor, strokeWidth: 1, selectable: false, evented: false })); objects.push(new fabric.Textbox(label, { left: text.x - 35, top: text.y - 7, width: 70, fontFamily: "Inter", fontSize: 10, textAlign: "center", fill: data.textColor, selectable: false, evented: false })); });
+    series.slice(0, 4).forEach((entry) => { const points = Array.from({ length: count }, (_, index) => polar(cx, cy, radius * Math.max(0, Math.min(1, (entry.values[index] ?? 0) / max)), index * 360 / count)); objects.push(new fabric.Polygon(points, { fill: entry.color, opacity: .18, stroke: entry.color, strokeWidth: 3, selectable: false, evented: false })); points.forEach((point) => objects.push(new fabric.Circle({ left: point.x - 4, top: point.y - 4, radius: 4, fill: entry.color, selectable: false, evented: false }))); }); objects.push(...legendObjects(data, series));
   } else {
-    const total = Math.max(1, data.values.reduce((sum, value) => sum + Math.max(0, value), 0)); const cx = chartLeft + chartWidth / 2; const cy = chartTop + chartHeight / 2; const outer = Math.min(chartWidth, chartHeight) * .42; const inner = outer * .58; let angle = 0;
-    data.values.forEach((value, index) => { const sweep = (Math.max(0, value) / total) * 360; objects.push(new fabric.Path(donutPath(cx, cy, outer, inner, angle, angle + Math.max(.5, sweep - 1)), { fill: data.colors[index % data.colors.length], strokeWidth: 0, selectable: false, evented: false })); angle += sweep; });
-    objects.push(new fabric.Textbox(`${Math.round(total)}`, { left: cx - inner, top: cy - 18, width: inner * 2, fontFamily: "Inter", fontSize: 26, fontWeight: "700", textAlign: "center", fill: data.textColor, selectable: false, evented: false }));
-    if (data.showLegend) data.labels.forEach((label, index) => { const x = data.width - 180; const y = 100 + index * 42; objects.push(new fabric.Circle({ left: x, top: y, radius: 7, fill: data.colors[index % data.colors.length], selectable: false, evented: false })); objects.push(new fabric.Textbox(`${label}${data.showValues ? ` · ${data.values[index] ?? 0}` : ""}`, { left: x + 22, top: y - 2, width: 140, fontFamily: "Inter", fontSize: 13, fill: data.textColor, selectable: false, evented: false })); });
+    const value = Math.max(0, series[0]?.values[0] ?? data.values[0] ?? 0); const maximum = Math.max(1, data.maxValue ?? 100); const percent = Math.max(0, Math.min(100, value / maximum * 100)); const cx = data.width / 2; const cy = chartTop + chartHeight / 2; const radius = Math.min(chartWidth, chartHeight) * .36; const strokeWidth = Math.max(16, radius * .18);
+    objects.push(new fabric.Circle({ left: cx - radius, top: cy - radius, radius, fill: "rgba(0,0,0,0)", stroke: data.gridColor, strokeWidth, selectable: false, evented: false })); if (percent > .1) objects.push(new fabric.Path(arcStrokePath(cx, cy, radius, 0, Math.min(359.8, percent * 3.6)), { fill: "rgba(0,0,0,0)", stroke: series[0]?.color ?? data.colors[0], strokeWidth, strokeLineCap: "round", selectable: false, evented: false })); objects.push(new fabric.Textbox(`${Math.round(percent)}%`, { left: cx - radius, top: cy - 25, width: radius * 2, fontFamily: "Inter", fontSize: 36, fontWeight: "700", textAlign: "center", fill: data.textColor, selectable: false, evented: false })); if (data.showValues) objects.push(new fabric.Textbox(`${formatChartValue(data, value)} / ${formatChartValue(data, maximum)}`, { left: cx - radius, top: cy + 22, width: radius * 2, fontFamily: "Inter", fontSize: 12, textAlign: "center", fill: data.textColor, opacity: .65, selectable: false, evented: false }));
   }
   return objects;
 }
@@ -198,7 +267,8 @@ export function readSmartElementData(object: fabric.FabricObject | null | undefi
 export function isSmartElement(object: fabric.FabricObject | null | undefined): object is SmartFabricObject { return Boolean(readSmartElementData(object)); }
 export async function rebuildSmartElement(canvas: fabric.Canvas, source: fabric.FabricObject, data: SmartElementData): Promise<SmartFabricObject> {
   const replacement = await buildSmartElement(data); replacement.set({ left: source.left, top: source.top, originX: source.originX, originY: source.originY, angle: source.angle, scaleX: source.scaleX, scaleY: source.scaleY, flipX: source.flipX, flipY: source.flipY, opacity: source.opacity, shadow: source.shadow });
-  const index = canvas.getObjects().indexOf(source); canvas.remove(source); canvas.add(replacement); if (index >= 0) (canvas as any).moveObjectTo?.(replacement, index); canvas.setActiveObject(replacement); replacement.setCoords(); canvas.requestRenderAll(); canvas.fire("object:modified", { target: replacement } as any); return replacement;
+  const sourceTarget = source as SmartFabricObject; replacement.ddoneId = sourceTarget.ddoneId; replacement.templateEditable = sourceTarget.templateEditable; replacement.templateLocked = sourceTarget.templateLocked;
+  const index = canvas.getObjects().indexOf(source); canvas.remove(source); canvas.add(replacement); if (index >= 0) (canvas as unknown as { moveObjectTo?: (object: fabric.FabricObject, index: number) => void }).moveObjectTo?.(replacement, index); canvas.setActiveObject(replacement); replacement.setCoords(); canvas.requestRenderAll(); canvas.fire("object:modified", { target: replacement } as never); return replacement;
 }
 export function resizeTableData(data: SmartTableData, rows: number, columns: number): SmartTableData {
   const nextRows = Math.max(1, Math.min(20, Math.round(rows))); const nextColumns = Math.max(1, Math.min(10, Math.round(columns)));
