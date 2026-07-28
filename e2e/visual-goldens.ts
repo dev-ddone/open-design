@@ -1,6 +1,6 @@
 const visualGoldens = {
-  editorEmptyChromiumLinux: "52aacdaf4a3a911c167a66014838ce419a99e4e8dba8aac4b9ccf810446c495e",
-  assetPickerChromiumLinux: "ddb2ccabf1418fc78403587319144c2bc0f1bd4ba7c7530282c20738524e5864",
+  editorEmptyChromiumLinux: "c10d4149b4fd2575a1669c21d1c7ee1ffaf40f6fc8ce636e1e3b2b765c90c806",
+  assetPickerChromiumLinux: "735451449693dfff00eff767adae77613dab9807e7effd0041e28162873a810b",
 } as const;
 
 export default visualGoldens;
