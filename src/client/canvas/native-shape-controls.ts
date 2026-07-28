@@ -2,6 +2,7 @@ import * as fabric from "fabric";
 import { isNativeShape, readNativeShapeData, rebuildNativeShape, type NativeShapeData, type NativeShapeObject } from "./native-shapes";
 
 type ControlTransform = { target: fabric.FabricObject };
+type AffineMatrix = [number, number, number, number, number, number];
 type PendingShape = NativeShapeObject & { __ddonePendingNativeShapeData?: NativeShapeData };
 type LocalPointResolver = (data: NativeShapeData, object: fabric.FabricObject) => fabric.Point;
 type DataUpdater = (data: NativeShapeData, point: fabric.Point, object: fabric.FabricObject) => NativeShapeData;
@@ -34,7 +35,7 @@ function localPointFromPointer(object: fabric.FabricObject, x: number, y: number
   return fabric.util.transformPoint(new fabric.Point(x, y), inverted);
 }
 
-function localToCanvas(point: fabric.Point, finalMatrix: number[]): fabric.Point {
+function localToCanvas(point: fabric.Point, finalMatrix: AffineMatrix): fabric.Point {
   return fabric.util.transformPoint(point, finalMatrix);
 }
 
@@ -78,7 +79,7 @@ function dataControl(
     touchSizeX: 30,
     touchSizeY: 30,
     render: renderHandle as never,
-    positionHandler: ((_dimensions: unknown, finalMatrix: number[], object: fabric.FabricObject) => {
+    positionHandler: ((_dimensions: unknown, finalMatrix: AffineMatrix, object: fabric.FabricObject) => {
       const data = readNativeShapeData(object);
       if (!data) return localToCanvas(centerFor(object), finalMatrix);
       return localToCanvas(pointResolver(data, object), finalMatrix);
