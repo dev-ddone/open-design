@@ -1,0 +1,105 @@
+name: One-shot media preview patch
+
+on:
+  push:
+    branches:
+      - feat/ddone-pro-elements-canvas-ux
+    paths:
+      - .github/workflows/tmp-patch-media-preview.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ddone-pro-elements-canvas-ux
+          fetch-depth: 0
+      - name: Apply media safety patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path('src/server/elements-universe.ts')
+          text = server.read_text()
+          old = 'if (provider === "giphy") return Boolean(config.elements.giphyApiKey);'
+          new = 'if (provider === "giphy") return false; // Official GIPHY search must remain client-side.'
+          if text.count(old) != 1:
+              raise SystemExit('Expected one GIPHY provider switch')
+          server.write_text(text.replace(old, new))
+
+          client = Path('src/client/components/elements-library.tsx')
+          text = client.read_text()
+          old = '''  const previewAudio = useCallback((element: DesignElement) => {
+    if (!element.assetUrl) return;
+    if (playingId === element.id && audio) {
+      audio.pause();
+      setPlayingId(null);
+      return;
+    }
+    audio?.pause();
+    const next = new Audio(element.assetUrl);
+    next.onended = () => setPlayingId(null);
+    next.onerror = () => {
+      setPlayingId(null);
+      setError("Anteprima audio non disponibile");
+    };
+    setAudio(next);
+    setPlayingId(element.id);
+    void next.play();
+  }, [audio, playingId]);'''
+          new = '''  const previewAudio = useCallback(async (element: DesignElement) => {
+    if (!element.assetUrl) return;
+    if (playingId === element.id && audio) {
+      audio.pause();
+      if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+      setPlayingId(null);
+      setAudio(null);
+      return;
+    }
+    if (audio) {
+      audio.pause();
+      if (audio.src.startsWith("blob:")) URL.revokeObjectURL(audio.src);
+    }
+    try {
+      const response = await fetchProtected(element.assetUrl);
+      const blob = await response.blob();
+      if (!blob.type.startsWith("audio/")) throw new Error("La sorgente non ha restituito audio");
+      const objectUrl = URL.createObjectURL(blob);
+      const next = new Audio(objectUrl);
+      const cleanup = () => URL.revokeObjectURL(objectUrl);
+      next.onended = () => {
+        cleanup();
+        setPlayingId(null);
+        setAudio(null);
+      };
+      next.onerror = () => {
+        cleanup();
+        setPlayingId(null);
+        setAudio(null);
+        setError("Anteprima audio non disponibile");
+      };
+      setAudio(next);
+      setPlayingId(element.id);
+      await next.play();
+    } catch (caught) {
+      setPlayingId(null);
+      setAudio(null);
+      setError(caught instanceof Error ? caught.message : "Anteprima audio non disponibile");
+    }
+  }, [audio, playingId]);'''
+          if text.count(old) != 1:
+              raise SystemExit('Expected one audio preview callback')
+          text = text.replace(old, new)
+          text = text.replace('onPreviewAudio={() => previewAudio(element)}', 'onPreviewAudio={() => void previewAudio(element)}')
+          client.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/elements-universe.ts src/client/components/elements-library.tsx
+          git commit -m "fix(media): protect audio previews and disable server-side GIPHY"
+          git push origin HEAD:feat/ddone-pro-elements-canvas-ux

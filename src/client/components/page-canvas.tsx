@@ -2,6 +2,10 @@ import { useRef, useEffect } from "preact/hooks";
 import * as fabric from "fabric";
 import { useEditor } from "../context";
 import type { Page } from "../types";
+import { applyEditRules, serializeCanvas } from "../canvas-model";
+import { normalizeGroupedObject } from "../canvas/grouping";
+import { installSmartGuides } from "../canvas/smart-guides";
+import type { EditorContextMenuRequest } from "./editor-context-menu";
 
 interface PageCanvasProps {
   page: Page;
@@ -12,16 +16,18 @@ interface PageCanvasProps {
 }
 
 export function PageCanvas({ page, isActive, width, height, onActivate }: PageCanvasProps) {
-  const { registerCanvas, unregisterCanvas } = useEditor();
+  const { registerCanvas, unregisterCanvas, templateEditRules, readOnly, beginCrop } = useEditor();
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const onActivateRef = useRef(onActivate);
+  const beginCropRef = useRef(beginCrop);
+  const loadedJsonRef = useRef<string>("{}");
   onActivateRef.current = onActivate;
+  beginCropRef.current = beginCrop;
 
   useEffect(() => {
     if (!canvasElRef.current || fabricRef.current) return;
-
-    const c = new fabric.Canvas(canvasElRef.current, {
+    const canvas = new fabric.Canvas(canvasElRef.current, {
       width,
       height,
       backgroundColor: "#ffffff",
@@ -29,132 +35,141 @@ export function PageCanvas({ page, isActive, width, height, onActivate }: PageCa
       selection: true,
       controlsAboveOverlay: true,
     });
-
-    // Retina rendering
     const dpr = window.devicePixelRatio || 1;
-    c.setDimensions({ width: width * dpr, height: height * dpr }, { cssOnly: false });
-    c.setDimensions({ width, height }, { cssOnly: true });
-    c.setViewportTransform([dpr, 0, 0, dpr, 0, 0]);
+    canvas.setDimensions({ width: width * dpr, height: height * dpr }, { cssOnly: false });
+    canvas.setDimensions({ width, height }, { cssOnly: true });
+    canvas.setViewportTransform([dpr, 0, 0, dpr, 0, 0]);
 
-    // Custom control appearance — applied per-object via object:added
-    const CONTROL_STYLE = {
+    const controlStyle = {
       transparentCorners: false,
-      borderColor: "#6366f1",
+      borderColor: "#7c3aed",
       borderScaleFactor: 1.5,
       padding: 6,
       cornerSize: 14,
       cornerColor: "#ffffff",
-      cornerStrokeColor: "#6366f1",
+      cornerStrokeColor: "#7c3aed",
       cornerStyle: "circle" as const,
     };
-
-    // Custom render for corner controls (white circles with accent stroke)
-    const renderCircleCorner = (
-      ctx: CanvasRenderingContext2D,
+    const renderCircle = (context: CanvasRenderingContext2D, left: number, top: number) => {
+      context.save();
+      context.translate(left, top);
+      context.beginPath();
+      context.arc(0, 0, 7, 0, Math.PI * 2);
+      context.fillStyle = "#ffffff";
+      context.strokeStyle = "#7c3aed";
+      context.lineWidth = 2;
+      context.fill();
+      context.stroke();
+      context.restore();
+    };
+    const renderPill = (horizontal: boolean) => (
+      context: CanvasRenderingContext2D,
       left: number,
       top: number,
-      _styleOverride: unknown,
-      _fabricObject: fabric.FabricObject,
     ) => {
-      const size = 14;
-      ctx.save();
-      ctx.translate(left, top);
-      ctx.beginPath();
-      ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#6366f1";
-      ctx.lineWidth = 2;
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
+      const pillWidth = horizontal ? 28 : 8;
+      const pillHeight = horizontal ? 8 : 28;
+      context.save();
+      context.translate(left, top);
+      context.beginPath();
+      context.roundRect(-pillWidth / 2, -pillHeight / 2, pillWidth, pillHeight, 4);
+      context.fillStyle = "#ffffff";
+      context.strokeStyle = "#7c3aed";
+      context.lineWidth = 2;
+      context.fill();
+      context.stroke();
+      context.restore();
     };
-
-    // Custom render for side controls (rounded pill handles)
-    const renderPillControl = (horizontal: boolean) => {
-      return (
-        ctx: CanvasRenderingContext2D,
-        left: number,
-        top: number,
-        _styleOverride: unknown,
-        _fabricObject: fabric.FabricObject,
-      ) => {
-        const w = horizontal ? 28 : 8;
-        const h = horizontal ? 8 : 28;
-        ctx.save();
-        ctx.translate(left, top);
-        ctx.beginPath();
-        ctx.roundRect(-w / 2, -h / 2, w, h, 4);
-        ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = "#6366f1";
-        ctx.lineWidth = 2;
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      };
-    };
-
-    // Apply custom controls to an object
-    const applyCustomControls = (obj: fabric.FabricObject) => {
-      obj.set(CONTROL_STYLE);
-      // Override corner renders
-      if (obj.controls) {
-        for (const key of ["tl", "tr", "bl", "br"]) {
-          if (obj.controls[key]) {
-            obj.controls[key].render = renderCircleCorner;
-            obj.controls[key].sizeX = 18;
-            obj.controls[key].sizeY = 18;
-          }
-        }
-        for (const key of ["mt", "mb"]) {
-          if (obj.controls[key]) {
-            obj.controls[key].render = renderPillControl(true);
-            obj.controls[key].sizeX = 32;
-            obj.controls[key].sizeY = 12;
-          }
-        }
-        for (const key of ["ml", "mr"]) {
-          if (obj.controls[key]) {
-            obj.controls[key].render = renderPillControl(false);
-            obj.controls[key].sizeX = 12;
-            obj.controls[key].sizeY = 32;
-          }
-        }
+    const applyControls = (object: fabric.FabricObject) => {
+      normalizeGroupedObject(object);
+      object.set(controlStyle);
+      for (const key of ["tl", "tr", "bl", "br"]) {
+        if (object.controls?.[key]) object.controls[key].render = renderCircle as any;
+      }
+      for (const key of ["mt", "mb"]) {
+        if (object.controls?.[key]) object.controls[key].render = renderPill(true) as any;
+      }
+      for (const key of ["ml", "mr"]) {
+        if (object.controls?.[key]) object.controls[key].render = renderPill(false) as any;
       }
     };
-
-    // Apply to all existing objects
-    c.getObjects().forEach(applyCustomControls);
-
-    // Apply to any newly added objects
-    c.on("object:added", (e) => {
-      if (e.target) applyCustomControls(e.target);
+    canvas.on("object:added", (event) => event.target && applyControls(event.target));
+    canvas.on("mouse:down", () => onActivateRef.current());
+    canvas.on("mouse:dblclick", (event) => {
+      const target = event.target;
+      if (!readOnly && target instanceof fabric.FabricImage && target.selectable) {
+        canvas.setActiveObject(target);
+        beginCropRef.current(target);
+      }
     });
 
-    // Load page content
-    if (page.canvas_json && page.canvas_json !== "{}") {
-      try {
-        c.loadFromJSON(JSON.parse(page.canvas_json)).then(() => c.requestRenderAll());
-      } catch {
-        // ignore parse errors
-      }
+    const openContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onActivateRef.current();
+      const target = canvas.findTarget(event as any) ?? null;
+      if (target?.selectable) canvas.setActiveObject(target);
+      else if (!target) canvas.discardActiveObject();
+      canvas.requestRenderAll();
+      const detail: EditorContextMenuRequest = {
+        x: event.clientX,
+        y: event.clientY,
+        pageId: page.id,
+        target,
+      };
+      window.dispatchEvent(new CustomEvent("ddone:context-menu", { detail }));
+    };
+    canvas.upperCanvasEl.addEventListener("contextmenu", openContextMenu);
+
+    const uninstallGuides = installSmartGuides(canvas, {
+      threshold: 7,
+      color: "#d946ef",
+      lineWidth: 1,
+    });
+
+    const initial = page.canvas_json && page.canvas_json !== "{}" ? page.canvas_json : "{}";
+    loadedJsonRef.current = initial;
+    if (initial !== "{}") {
+      void canvas.loadFromJSON(JSON.parse(initial)).then(() => {
+        canvas.getObjects().forEach(applyControls);
+        applyEditRules(canvas, templateEditRules, readOnly);
+      });
     }
 
-    // On mouse down, activate this canvas (use ref to avoid stale closure)
-    c.on("mouse:down", () => onActivateRef.current());
-
-    fabricRef.current = c;
-    registerCanvas(page.id, c);
-
+    fabricRef.current = canvas;
+    registerCanvas(page.id, canvas);
     return () => {
+      canvas.upperCanvasEl.removeEventListener("contextmenu", openContextMenu);
+      uninstallGuides();
       unregisterCanvas(page.id);
-      c.dispose();
+      canvas.dispose();
       fabricRef.current = null;
     };
   }, []);
 
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !page.canvas_json || page.canvas_json === "{}") return;
+    if (loadedJsonRef.current === page.canvas_json || serializeCanvas(canvas) === page.canvas_json) {
+      loadedJsonRef.current = page.canvas_json;
+      return;
+    }
+    loadedJsonRef.current = page.canvas_json;
+    void canvas.loadFromJSON(JSON.parse(page.canvas_json)).then(() => {
+      canvas.getObjects().forEach(normalizeGroupedObject);
+      applyEditRules(canvas, templateEditRules, readOnly);
+      canvas.requestRenderAll();
+    });
+  }, [page.canvas_json]);
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (canvas) applyEditRules(canvas, templateEditRules, readOnly);
+  }, [readOnly, JSON.stringify(templateEditRules)]);
+
   return (
     <div
-      class={`shadow-lg rounded-lg overflow-hidden ${isActive ? "ring-2 ring-[#6366f1]" : ""}`}
+      class={`relative shadow-lg rounded-lg overflow-visible ${isActive ? "ring-2 ring-[#7c3aed]" : ""}`}
       style={{ width, height }}
     >
       <canvas ref={canvasElRef} />

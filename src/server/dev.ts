@@ -1,0 +1,58 @@
+import type { Server } from "node:http";
+import { serve } from "@hono/node-server";
+import app from "./platform-app.js";
+import { installCollaborationServer } from "./collaboration.js";
+import { config } from "./config.js";
+import { bootstrapAdmin, closeDatabase, migrate } from "./db.js";
+import { verifyEmailTransport } from "./mailer.js";
+import { installOpenverseAuthenticatedFetch } from "./openverse-auth.js";
+import { initializeStorage } from "./storage.js";
+
+async function main(): Promise<void> {
+  installOpenverseAuthenticatedFetch();
+  await migrate();
+  await bootstrapAdmin();
+  await initializeStorage();
+  if (config.email.delivery === "smtp") {
+    try {
+      await verifyEmailTransport();
+      console.info("SMTP transport verified");
+    } catch (error) {
+      console.error("SMTP verification failed; email workflows will return an error", error);
+    }
+  }
+
+  const server = serve(
+    {
+      fetch: app.fetch,
+      hostname: "0.0.0.0",
+      port: config.port,
+    },
+    (info) => {
+      console.info(`DDone Design listening on http://${info.address}:${info.port}`);
+    },
+  );
+
+  const closeCollaboration = installCollaborationServer(server as Server);
+
+  let closing = false;
+  const shutdown = async (signal: string) => {
+    if (closing) return;
+    closing = true;
+    console.info(`Received ${signal}; shutting down`);
+    closeCollaboration();
+    server.close(async () => {
+      await closeDatabase();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+}
+
+main().catch((error) => {
+  console.error("Unable to start DDone Design", error);
+  process.exit(1);
+});

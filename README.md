@@ -1,145 +1,216 @@
-<img src="readme-banner.png" alt="Open Design preview" width="100%" />
+<img src="readme-banner.png" alt="DDone Design preview" width="100%" />
 
-# OpenClaw Design App: The Open-Source Canva Alternative for SaaS
+# DDone Design
 
-A design editor for creating professional social media graphics — LinkedIn posts, quote cards, announcements, and more. Part of the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem. Zero cloud dependencies — runs locally with SQLite.
+A self-hosted, open-source static design workspace based on Open Design. It combines a Fabric.js multi-page editor with organizations, client-level permissions, private storage, realtime Yjs collaboration, a federated open-asset search engine and agency review/data workflows.
 
-Built with **Preact + Fabric.js + Tailwind CSS + Hono + SQLite**. Ships with a Figma-inspired dark editor UI, retina canvas rendering, and pre-built LinkedIn post templates.
+## Static product scope
 
-## What Is It?
+DDone Design focuses on social graphics, print layouts, presentations, brand-controlled templates and collaborative agency workflows. Video editing, audio, animated timelines, GIF animation tooling and 3D are intentionally outside scope.
 
-OpenClaw Design App is a production-ready graphic design editor designed for the OpenClaw community. Think of it as an open-source Canva alternative — a visual design tool you can self-host, customize, and embed in any SaaS product.
+The current release is `2.10.0-alpha.1`. See [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md), [`docs/STATIC_DESIGN_ROADMAP.md`](docs/STATIC_DESIGN_ROADMAP.md), [`docs/UX_COMPETITIVE_RESEARCH.md`](docs/UX_COMPETITIVE_RESEARCH.md), [`HANDOFF.md`](HANDOFF.md) and [`changelog/`](changelog/).
 
-Unlike Canva or Adobe Express, this runs entirely on your own infrastructure. No subscriptions, no watermarks, no vendor lock-in. Create pixel-perfect social media graphics with professional typography and export at 2x resolution.
+## Included
 
-## Features
+- **Organizations and users** with secure cookie authentication.
+- **Roles:** `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, including client-specific access.
+- **Realtime object-level collaboration** with presence and collaborator indicators.
+- **Persistent versions**, restore and safety snapshots.
+- **PNG, JPG, SVG and multi-page PDF export.**
+- **Governed export preflight** using audit errors, review state and unresolved comments.
+- **Client brand kits** and selectively editable templates.
+- **Layers, grouping, precision controls and keyboard shortcuts.**
+- **Editable smart tables, grids and frames.**
+- **Static Smart Resize** plus multi-format campaign creation with independent dimensions.
+- **Design Audit** for layout, template fields, brand, readability and attribution checks.
+- **Comments and approval states** associated with designs, pages and objects.
+- **Contextual review pins**, replies, filters and mention metadata.
+- **Semantic template fields** for text, price, CTA, images and logos.
+- **CSV data merge** for the current page and multipage generation.
+- **Searchable page grid** with large thumbnails and atomic drag ordering.
+- **Attribution reports** in CSV and Markdown.
+- **PostgreSQL** for accounts, ACLs, designs, versions, templates, reviews, preferences and collaboration state.
+- **S3/MinIO or local storage** for private uploads.
+- **Docker Compose and Coolify deployment** with health checks and automatic migrations.
 
-- **Fabric.js canvas** — full object manipulation with retina/HiDPI rendering (2x device pixel ratio)
-- **Pre-built templates** — LinkedIn-optimized: Quote Card, Stats Highlight, Announcement, Tips List, Profile Card, Minimal Text
-- **10 Google Fonts** — Inter, Playfair Display, Montserrat, Poppins, Roboto, Open Sans, Lora, Raleway, Source Sans Pro, Merriweather
-- **Text editing** — font family, size, weight, alignment, color, line height, letter spacing
-- **Shapes** — rectangles, circles, triangles, lines with fill, stroke, border radius
-- **Image uploads** — drag-and-drop or click to upload, place on canvas
-- **Backgrounds** — solid colors, gradients, uploaded images
-- **Canvas sizes** — LinkedIn Square (1080x1080), LinkedIn Landscape (1200x627), LinkedIn Portrait (1200x1500), Instagram Story (1080x1920)
-- **Undo/Redo** — full history with keyboard shortcuts (Cmd+Z / Cmd+Shift+Z)
-- **2x PNG export** — crisp high-resolution output for social media
-- **Auto-save** — designs persist to SQLite with debounced saves
-- **Dual-mode UI** — human-optimized + AI-agent-optimized (`?agent=true`)
+## Elements universe
 
-## Quickstart
+The Elements sidebar performs one federated search across:
+
+- DDone curated vectors;
+- private organization/client uploads;
+- bundled Tabler Icons and Twemoji;
+- Iconify and its open icon collections;
+- Openverse openly licensed and public-domain media;
+- Wikimedia Commons;
+- optional administrator-managed HTTPS manifest packs.
+
+Available categories include shapes, tables, grids, charts, icons, emoji, illustrations, photos, ornaments, frames, food, cocktails, backgrounds, patterns and social assets. Results support source filters, pagination, favorites, recents and quick searches.
+
+Every inserted remote work keeps these fields inside the Fabric object and saved design:
+
+- provider;
+- source URL;
+- author;
+- license and license URL;
+- attribution text;
+- whether attribution is required.
+
+Provider failures are isolated: a temporary failure of one archive returns a warning while results from healthy providers remain available. Favorites, recent items and named collections have authenticated organization-scoped persistence, with browser storage retained as an offline cache.
+
+### Provider configuration
+
+```env
+ELEMENTS_PROVIDERS=builtin,uploads,iconify,openverse,wikimedia
+ELEMENTS_CACHE_TTL_SECONDS=900
+ELEMENTS_REQUEST_TIMEOUT_MS=8000
+ELEMENTS_MAX_PER_PROVIDER=48
+OPENVERSE_API_URL=https://api.openverse.org
+OPENVERSE_CLIENT_ID=
+OPENVERSE_CLIENT_SECRET=
+OPENVERSE_API_TOKEN=
+OPENVERSE_LICENSES=cc0,pdm,by,by-sa
+WIKIMEDIA_API_URL=https://commons.wikimedia.org/w/api.php
+ELEMENT_PACK_URLS=
+```
+
+For authenticated Openverse access, configure `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` together. In Coolify, mark `OPENVERSE_CLIENT_SECRET` as a secret. The backend requests a short-lived OAuth2 token, stores it only in process memory, refreshes it before expiration and retries once with a fresh token after a `401`. Concurrent searches share the same in-flight token request. If authentication is temporarily unavailable, the provider falls back to `OPENVERSE_API_TOKEN` when configured, otherwise to anonymous access.
+
+`OPENVERSE_API_TOKEN` remains available for legacy/manual setups but should normally be empty when client credentials are used. No scheduled task, cron job or persistent token storage is required. To enable custom manifests, add `manifest` to `ELEMENTS_PROVIDERS` and provide comma-separated HTTPS manifest URLs.
+
+## Creative, template and quality tools
+
+The editor includes:
+
+- object opacity and configurable drop shadows;
+- brightness, contrast, saturation and blur;
+- grayscale and invert;
+- selected-color transparency;
+- circular and rounded image masks;
+- gradient backgrounds;
+- dot, stripe, grid and checker patterns;
+- random blob and wave generators;
+- vector QR code generation;
+- static Smart Resize and multi-format campaign-copy creation;
+- semantic field definition and validation;
+- CSV page generation;
+- comments, review pins, decisions and approval state;
+- automatic design/brand audit and attribution reporting;
+- permission-aware export preflight;
+- compact and full-screen multipage navigation.
+
+Generated elements are native Fabric objects, so they participate in undo/redo, saved versions, templates and realtime collaboration. Some raster image effects intentionally produce a new raster result rather than a live editable filter stack.
+
+## Quick start
+
+Requirements:
+
+- Docker with Compose;
+- Git.
 
 ```bash
-git clone https://github.com/clawnify/open-design.git
+git clone https://github.com/dev-ddone/open-design.git
 cd open-design
-pnpm install
-pnpm run dev
+cp .env.example .env
 ```
 
-Open `http://localhost:5178` in your browser. Data persists in `data.db`, uploads in `uploads/`.
+Set at least:
 
-### Agent Mode (for OpenClaw / Claude Code)
-
-Append `?agent=true` to the URL:
-
+```env
+APP_URL=http://localhost:3006
+JWT_SECRET=replace-with-at-least-32-random-characters
+S3_SECRET_KEY=replace-with-a-secure-minio-password
+BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-secure-password
 ```
-http://localhost:5178/?agent=true
-```
 
-This activates an agent-friendly UI with:
-- Explicit buttons always visible (no hover-to-reveal)
-- Large click targets for reliable browser automation
-- All controls accessible without drag interactions
-- Semantic labels for AI navigation
-
-### Using with Claude Code
-
-Claude Code can interact with the design editor through the REST API:
+Start the stack:
 
 ```bash
-# Create a new design
-curl -X POST http://localhost:3006/api/designs \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Q1 Results", "width": 1080, "height": 1080}'
-
-# Load a template
-curl http://localhost:3006/api/templates/1
-
-# Update design with canvas JSON
-curl -X PUT http://localhost:3006/api/designs/1 \
-  -H "Content-Type: application/json" \
-  -d '{"canvas_json": "{...}"}'
+docker compose up --build -d
 ```
 
-OpenClaw agents can also use the browser tool to visually interact with the editor — navigate, click templates, edit text, and export PNGs.
+Open `http://localhost:3006`; the health endpoint is `http://localhost:3006/health`.
 
-## Tech Stack
+## Local development
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Preact, TypeScript, Tailwind CSS v4, Vite |
-| **Canvas** | Fabric.js v6 (retina rendering, object manipulation) |
-| **Backend** | Hono, Node.js |
-| **Database** | SQLite (better-sqlite3) |
-| **Fonts** | Google Fonts (WebFontLoader) |
-| **Icons** | Lucide |
+```bash
+docker compose up -d postgres minio
+corepack enable
+pnpm install --no-frozen-lockfile
+cp .env.example .env
+pnpm dev
+```
 
-### Prerequisites
+Frontend development URL: `http://localhost:5178`.
 
-- Node.js 20+
-- pnpm (or npm/yarn)
+API and production URL: `http://localhost:3006`.
+
+Run the local quality gate with:
+
+```bash
+pnpm check
+```
+
+## Permission model
+
+| Capability | Owner | Admin | Editor | Viewer |
+|---|---:|---:|---:|---:|
+| Manage workspace members | Yes | Yes | No | No |
+| Configure client permissions | Yes | Yes | No | No |
+| Create clients | Yes | Yes | Conditional | No |
+| Create and edit designs | Yes | Yes | Yes | No |
+| Upload and reuse assets | Yes | Yes | Yes | No |
+| Comment on accessible designs | Yes | Yes | Yes | Yes |
+| Change review state | Yes | Yes | Yes | No |
+| Reorder pages | Yes | Yes | Yes | No |
+| Override export blockers | Yes | Yes | Yes | No |
+| View and export clean designs | Yes | Yes | Yes | Yes |
+
+Every design, client, upload, private template and brand kit is scoped to an organization. API authorization is enforced server-side.
+
+## Production deployment
+
+See [`docs/COOLIFY_DEPLOYMENT.md`](docs/COOLIFY_DEPLOYMENT.md) for:
+
+- Coolify configuration;
+- required secrets and provider settings;
+- persistent volumes;
+- WebSocket routing;
+- SMTP configuration;
+- backup and recovery;
+- safe update steps.
 
 ## Architecture
 
-```
-src/
-  server/
-    schema.sql  — SQLite schema (designs, templates) + template seeds
-    db.ts       — SQLite wrapper (query, get, run, transaction)
-    index.ts    — Hono REST API (designs CRUD, templates, uploads)
-    uploads.ts  — Local file upload management
-    dev.ts      — Dev server with static file serving
-  client/
-    app.tsx           — Root component with WebFont loading
-    context.tsx       — Editor context + canvas size presets
-    hooks/
-      use-canvas.ts   — Fabric.js state, undo/redo, zoom, export
-      use-designs.ts  — Designs CRUD + auto-save + template loading
-    components/
-      editor.tsx        — Main layout (toolbar + sidebars + canvas)
-      canvas.tsx        — Fabric.js canvas with retina rendering
-      toolbar.tsx       — Size picker, undo/redo, zoom, export, save
-      left-sidebar.tsx  — Templates, text, shapes, images, backgrounds
-      right-sidebar.tsx — Properties panel (context-aware per selection)
-      template-card.tsx — Template thumbnail in gallery
-      design-list.tsx   — Saved designs list with rename/delete
-```
+```text
+src/client
+  Preact UI
+  Fabric.js multi-page static editor
+  compact strip and searchable page grid
+  layers, smart structures and precision tools
+  federated Elements browser
+  semantic template fields and CSV production
+  Smart Resize, review, Design Audit and export preflight
+  client ACL and brand-kit controls
+  object-level Yjs collaboration
 
-### Data Model
+src/server
+  Hono API on Node.js
+  JWT cookie authentication
+  organization/client authorization
+  review/comment and preference persistence
+  atomic page ordering
+  federated provider adapters and secure media proxies
+  automatic Openverse OAuth2 token lifecycle
+  PostgreSQL persistence
+  MinIO/S3 storage
+  authenticated Yjs WebSocket server
 
-```sql
-designs   (id, name, canvas_json, width, height, thumbnail_url, created_at, updated_at)
-templates (id, name, category, canvas_json, width, height, thumbnail_url, sort_order)
+migrations
+  versioned PostgreSQL schema
 ```
 
-### API Endpoints
+## Licensing
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/designs` | List all designs |
-| POST | `/api/designs` | Create a design |
-| GET | `/api/designs/:id` | Get a design |
-| PUT | `/api/designs/:id` | Update a design |
-| DELETE | `/api/designs/:id` | Delete a design |
-| GET | `/api/templates` | List all templates |
-| GET | `/api/templates/:id` | Get a template |
-| POST | `/api/uploads` | Upload an image file |
-| GET | `/api/uploads/:filename` | Serve an uploaded image |
-
-## Community & Contributions
-
-This project is part of the [OpenClaw](https://github.com/openclaw/openclaw) ecosystem. Contributions are welcome — open an issue or submit a PR.
-
-## License
-
-MIT
+DDone Design is MIT and remains based on the upstream Open Design work. Third-party works retain their original licenses. Search results expose provider, author, source and license metadata; users remain responsible for following attribution, share-alike, trademark and other source-specific requirements.

@@ -1,0 +1,95 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3006
+      APP_URL: ${APP_URL:-http://localhost:3006}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-open_design}:${POSTGRES_PASSWORD:-open_design}@postgres:5432/${POSTGRES_DB:-open_design}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-ddone_design_session}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-14}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+      EMAIL_DELIVERY: ${EMAIL_DELIVERY:-log}
+      EMAIL_FROM: ${EMAIL_FROM:-DDone Design <noreply@ddone.it>}
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-30}
+      INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-72}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      LOCAL_STORAGE_PATH: /app/data/uploads
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-open-design}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-open-design}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      ICONIFY_API_URL: ${ICONIFY_API_URL:-https://api.iconify.design}
+      ICONIFY_COLLECTIONS: ${ICONIFY_COLLECTIONS:-tabler,ph,heroicons,bi,material-symbols}
+      ELEMENTS_PROVIDERS: ${ELEMENTS_PROVIDERS:-builtin,uploads,iconify,openverse,wikimedia,pexels,pixabay}
+      ELEMENTS_CACHE_TTL_SECONDS: ${ELEMENTS_CACHE_TTL_SECONDS:-900}
+      ELEMENTS_REQUEST_TIMEOUT_MS: ${ELEMENTS_REQUEST_TIMEOUT_MS:-8000}
+      ELEMENTS_MAX_PER_PROVIDER: ${ELEMENTS_MAX_PER_PROVIDER:-48}
+      OPENVERSE_API_URL: ${OPENVERSE_API_URL:-https://api.openverse.org}
+      OPENVERSE_CLIENT_ID: ${OPENVERSE_CLIENT_ID:-}
+      OPENVERSE_CLIENT_SECRET: ${OPENVERSE_CLIENT_SECRET:-}
+      OPENVERSE_API_TOKEN: ${OPENVERSE_API_TOKEN:-}
+      OPENVERSE_LICENSES: ${OPENVERSE_LICENSES:-cc0,pdm,by,by-sa}
+      WIKIMEDIA_API_URL: ${WIKIMEDIA_API_URL:-https://commons.wikimedia.org/w/api.php}
+      PEXELS_API_URL: ${PEXELS_API_URL:-https://api.pexels.com}
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PIXABAY_API_URL: ${PIXABAY_API_URL:-https://pixabay.com/api/}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@ddone.it}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-DDone Admin}
+      BOOTSTRAP_ORGANIZATION_NAME: ${BOOTSTRAP_ORGANIZATION_NAME:-DDone}
+    volumes:
+      - app_uploads:/app/data/uploads
+    expose:
+      - "3006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-open_design}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-open_design}
+      POSTGRES_DB: ${POSTGRES_DB:-open_design}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-open_design} -d ${POSTGRES_DB:-open_design}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-open-design}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  app_uploads:
