@@ -87,7 +87,17 @@ localization.use("/api/elements-universe/search", async (c, next) => {
   if (expanded === raw) return next();
   url.searchParams.set("q", expanded);
   url.searchParams.set("_localized", "1");
-  return Response.redirect(url, 307);
+
+  // Never expose c.req.url's internal Docker/Coolify origin to the browser.
+  // A relative Location is resolved against the public application origin.
+  const location = `${url.pathname}?${url.searchParams.toString()}`;
+  return new Response(null, {
+    status: 307,
+    headers: {
+      Location: location,
+      "Cache-Control": "no-store",
+    },
+  });
 });
 
 export default localization;
