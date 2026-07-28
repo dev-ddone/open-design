@@ -9,7 +9,7 @@ test("creates and edits a persistent native circle", async ({ page }) => {
 
   await page.getByRole("button").filter({ hasText: "Cerchio" }).first().click();
   await expect(page.getByTestId("native-shape-inspector")).toBeVisible();
-  await expect(page.getByText("Cerchio", { exact: true }).last()).toBeVisible();
+  await expect(page.getByLabel("Tipo forma")).toHaveValue("circle");
 
   await page.getByLabel("Modalità").selectOption("linear");
   await page.getByRole("button", { name: /Nodo/ }).click();
@@ -49,7 +49,7 @@ test("creates a multi-series chart and changes its renderer", async ({ page }) =
   await expect(chartType).toHaveValue("grouped-bar");
   await chartType.selectOption("radar");
   await page.getByRole("button", { name: "Serie", exact: true }).click();
-  await expect(page.getByDisplayValue("Serie 3")).toBeVisible();
+  await expect(page.locator('input[value="Serie 3"]')).toBeVisible();
   await page.getByRole("button", { name: "Applica modifiche", exact: true }).click();
   await expect(page.getByText("Elemento aggiornato e sincronizzato.", { exact: true })).toBeVisible();
 });
