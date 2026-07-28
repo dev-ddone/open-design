@@ -39,8 +39,8 @@ function localToCanvas(point: fabric.Point, finalMatrix: AffineMatrix): fabric.P
   return fabric.util.transformPoint(point, finalMatrix);
 }
 
-function centerFor(object: fabric.FabricObject): fabric.Point {
-  return new fabric.Point((object.width ?? 1) / 2, (object.height ?? 1) / 2);
+function centerFor(_object: fabric.FabricObject): fabric.Point {
+  return new fabric.Point(0, 0);
 }
 
 function angleFromPoint(point: fabric.Point, object: fabric.FabricObject): number {
@@ -49,10 +49,9 @@ function angleFromPoint(point: fabric.Point, object: fabric.FabricObject): numbe
 }
 
 function polarPoint(object: fabric.FabricObject, angle: number, radiusScale = .45): fabric.Point {
-  const center = centerFor(object);
   const radius = Math.min(object.width ?? 1, object.height ?? 1) * radiusScale;
   const radians = (angle * Math.PI) / 180;
-  return new fabric.Point(center.x + Math.cos(radians) * radius, center.y + Math.sin(radians) * radius);
+  return new fabric.Point(Math.cos(radians) * radius, Math.sin(radians) * radius);
 }
 
 function flushPending(object: fabric.FabricObject): boolean {
@@ -121,16 +120,16 @@ export function configureNativeShapeControls(object: fabric.FabricObject | null 
 
   if (data.kind === "rounded-rect" || data.kind === "callout") {
     controls.ddoneRadius = dataControl(
-      (current) => new fabric.Point(clamped(current.cornerRadius, 0, current.width / 2), 0),
-      (current, point) => ({ ...current, cornerRadius: clamped(point.x, 0, Math.min(current.width, current.height) / 2) }),
+      (current, target) => new fabric.Point(-(target.width ?? current.width) / 2 + clamped(current.cornerRadius, 0, current.width / 2), -(target.height ?? current.height) / 2),
+      (current, point, target) => ({ ...current, cornerRadius: clamped(point.x + (target.width ?? current.width) / 2, 0, Math.min(current.width, current.height) / 2) }),
       "ew-resize",
     );
   }
 
   if (data.kind === "polygon" || data.kind === "star") {
     controls.ddonePoints = dataControl(
-      (current, target) => new fabric.Point(target.width ?? current.width, ((current.points - 3) / 21) * Math.max(1, target.height ?? current.height)),
-      (current, point, target) => ({ ...current, points: Math.round(3 + clamped(point.y / Math.max(1, target.height ?? current.height), 0, 1) * 21) }),
+      (current, target) => new fabric.Point((target.width ?? current.width) / 2, -(target.height ?? current.height) / 2 + ((current.points - 3) / 21) * Math.max(1, target.height ?? current.height)),
+      (current, point, target) => ({ ...current, points: Math.round(3 + clamped((point.y + (target.height ?? current.height) / 2) / Math.max(1, target.height ?? current.height), 0, 1) * 21) }),
       "ns-resize",
     );
   }
@@ -171,10 +170,9 @@ export function configureNativeShapeControls(object: fabric.FabricObject | null 
 
   if (data.fillMode === "linear") {
     const gradientPoint = (current: NativeShapeData, target: fabric.FabricObject, direction: -1 | 1) => {
-      const center = centerFor(target);
       const angle = (current.gradientAngle * Math.PI) / 180;
       const radius = Math.min(target.width ?? 1, target.height ?? 1) * .35;
-      return new fabric.Point(center.x + Math.cos(angle) * radius * direction, center.y + Math.sin(angle) * radius * direction);
+      return new fabric.Point(Math.cos(angle) * radius * direction, Math.sin(angle) * radius * direction);
     };
     const updateAngle = (current: NativeShapeData, point: fabric.Point, target: fabric.FabricObject) => ({ ...current, gradientAngle: angleFromPoint(point, target) });
     controls.ddoneGradientStart = dataControl((current, target) => gradientPoint(current, target, -1), (current, point, target) => ({ ...updateAngle(current, point, target), gradientAngle: angleFromPoint(point, target) + 180 }), "crosshair");
@@ -183,15 +181,19 @@ export function configureNativeShapeControls(object: fabric.FabricObject | null 
 
   if (data.fillMode === "radial") {
     controls.ddoneGradientCenter = dataControl(
-      (current, target) => new fabric.Point((target.width ?? 1) * current.gradientCenterX, (target.height ?? 1) * current.gradientCenterY),
-      (current, point, target) => ({ ...current, gradientCenterX: clamped(point.x / Math.max(1, target.width ?? 1), 0, 1), gradientCenterY: clamped(point.y / Math.max(1, target.height ?? 1), 0, 1) }),
+      (current, target) => new fabric.Point(((target.width ?? 1) * (current.gradientCenterX - .5)), ((target.height ?? 1) * (current.gradientCenterY - .5))),
+      (current, point, target) => ({ ...current, gradientCenterX: clamped(point.x / Math.max(1, target.width ?? 1) + .5, 0, 1), gradientCenterY: clamped(point.y / Math.max(1, target.height ?? 1) + .5, 0, 1) }),
       "move",
     );
     controls.ddoneGradientRadius = dataControl(
-      (current, target) => new fabric.Point((target.width ?? 1) * current.gradientCenterX + Math.max(target.width ?? 1, target.height ?? 1) * current.gradientRadius, (target.height ?? 1) * current.gradientCenterY),
+      (current, target) => {
+        const centerX = (target.width ?? 1) * (current.gradientCenterX - .5);
+        const centerY = (target.height ?? 1) * (current.gradientCenterY - .5);
+        return new fabric.Point(centerX + Math.max(target.width ?? 1, target.height ?? 1) * current.gradientRadius, centerY);
+      },
       (current, point, target) => {
-        const centerX = (target.width ?? 1) * current.gradientCenterX;
-        const centerY = (target.height ?? 1) * current.gradientCenterY;
+        const centerX = (target.width ?? 1) * (current.gradientCenterX - .5);
+        const centerY = (target.height ?? 1) * (current.gradientCenterY - .5);
         return { ...current, gradientRadius: clamped(Math.hypot(point.x - centerX, point.y - centerY) / Math.max(target.width ?? 1, target.height ?? 1), .05, 2) };
       },
       "ew-resize",
