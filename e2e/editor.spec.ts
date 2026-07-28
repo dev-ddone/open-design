@@ -32,7 +32,7 @@ test("Elements sidebar uses one search, three views and one filter panel", async
   await library.getByRole("button", { name: "Filtri elementi" }).click();
   const filters = library.getByRole("region", { name: "Filtri elementi" });
   await expect(filters).toBeVisible();
-  await expect(filters.getByText(/fonti attive/i)).toBeVisible();
+  await expect(filters.getByText(/^\d+ fonti attive$/)).toBeVisible();
   await expect(filters.getByLabel("Categoria")).toBeVisible();
   await expect(filters.getByLabel("Formato")).toBeVisible();
   await expect(filters.getByLabel("Fonte")).toBeVisible();
