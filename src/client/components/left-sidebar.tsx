@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Sparkles,
   Shapes,
+  CircleDashed,
   SwatchBook,
   WandSparkles,
   FolderOpen,
@@ -16,14 +17,16 @@ import type { Design, Page, Template } from "../types";
 import { TemplateCard } from "./template-card";
 import { DesignList } from "./design-list";
 import { ElementsLibraryV2 } from "./elements-library-v2";
+import { NativeShapesPanel } from "./native-shapes-panel";
 import { BrandKitPanel } from "./brand-kit-panel";
 import { ToolsPanel } from "./tools-panel";
 
-type Section = "templates" | "elements" | "tools" | "brand" | "text" | "images" | "background" | "designs";
+type Section = "templates" | "elements" | "shapes" | "tools" | "brand" | "text" | "images" | "background" | "designs";
 
 const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing: boolean }[] = [
   { key: "templates", icon: LayoutGrid, label: "Modelli", editing: true },
   { key: "elements", icon: Shapes, label: "Elementi", editing: true },
+  { key: "shapes", icon: CircleDashed, label: "Forme", editing: true },
   { key: "text", icon: Type, label: "Testo", editing: true },
   { key: "brand", icon: SwatchBook, label: "Brand", editing: true },
   { key: "images", icon: Upload, label: "Caricamenti", editing: true },
@@ -35,6 +38,7 @@ const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing:
 const SECTION_TITLES: Record<Section, string> = {
   templates: "Modelli",
   elements: "Elementi",
+  shapes: "Forme e linee",
   tools: "Strumenti",
   brand: "Brand kit",
   text: "Testo",
@@ -88,6 +92,14 @@ export function LeftSidebar() {
     };
     window.addEventListener("ddone:open-tool", handler);
     return () => window.removeEventListener("ddone:open-tool", handler);
+  }, [canEdit]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (canEdit) setActiveSection("shapes");
+    };
+    window.addEventListener("ddone:open-native-shapes", handler);
+    return () => window.removeEventListener("ddone:open-native-shapes", handler);
   }, [canEdit]);
 
   const handleSectionClick = (section: (typeof SECTIONS)[number]) => {
@@ -209,6 +221,7 @@ export function LeftSidebar() {
                 )}
 
                 {activeSection === "elements" && canEdit && <ElementsLibraryV2 />}
+                {activeSection === "shapes" && canEdit && <NativeShapesPanel />}
                 {activeSection === "tools" && canEdit && <ToolsPanel requestedTool={requestedTool} />}
                 {activeSection === "brand" && canEdit && <BrandKitPanel />}
 
