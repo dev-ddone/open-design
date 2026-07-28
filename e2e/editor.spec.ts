@@ -18,14 +18,24 @@ test("command palette opens page overview and asset library", async ({ page }) =
   await page.keyboard.press("Escape");
 });
 
-test("web library exposes curated pizza and ornamental searches", async ({ page }) => {
+test("Elements sidebar uses one search, three views and one filter panel", async ({ page }) => {
   await openFreshDesign(page);
-  await page.getByRole("button", { name: "Web", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Libreria web" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: /Pizze/ })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: /Cornici ornamentali/ })).toBeVisible();
-  await expect(dialog.getByPlaceholder(/Pizza, cornice barocca/)).toBeVisible();
+  const library = page.getByTestId("elements-library-v3");
+  await expect(library).toBeVisible();
+  await expect(library.getByRole("textbox", { name: "Cerca elementi" })).toBeVisible();
+  await expect(library.getByRole("tab", { name: "Esplora" })).toBeVisible();
+  await expect(library.getByRole("tab", { name: "Recenti" })).toBeVisible();
+  await expect(library.getByRole("tab", { name: "Preferiti" })).toBeVisible();
+  await expect(library.getByRole("button", { name: "Cornici e ornamenti" })).toBeVisible();
+  await expect(library.getByRole("button", { name: "Layout smart" })).toBeVisible();
+
+  await library.getByRole("button", { name: "Filtri elementi" }).click();
+  const filters = library.getByRole("region", { name: "Filtri elementi" });
+  await expect(filters).toBeVisible();
+  await expect(filters.getByText(/fonti attive/i)).toBeVisible();
+  await expect(filters.getByLabel("Categoria")).toBeVisible();
+  await expect(filters.getByLabel("Formato")).toBeVisible();
+  await expect(filters.getByLabel("Fonte")).toBeVisible();
 });
 
 test("gradient and dissolve tools expose editable nodes", async ({ page }) => {
