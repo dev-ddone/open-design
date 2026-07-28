@@ -1,22 +1,32 @@
 import { useEffect, useState } from "preact/hooks";
-import { BadgeCheck, Database, Layers3, Maximize2, MessageSquareCheck, SlidersHorizontal } from "lucide-preact";
+import { BadgeCheck, CircleDashed, Database, Layers3, Maximize2, MessageSquareCheck, SlidersHorizontal } from "lucide-preact";
+import { isNativeShape } from "../canvas/native-shapes";
 import { useEditor } from "../context";
 import { DesignAuditPanel } from "./design-audit-panel";
 import { LayersPanel } from "./layers-panel";
+import { NativeShapeInspector } from "./native-shape-inspector";
 import { ReviewPanel } from "./review-panel";
 import { RightSidebar } from "./right-sidebar";
 import { SmartResizePanel } from "./smart-resize-panel";
 import { TemplateDataPanel } from "./template-data-panel";
 
-type RightPanelTab = "properties" | "layers" | "resize" | "audit" | "review" | "data";
+type RightPanelTab = "properties" | "shape" | "layers" | "resize" | "audit" | "review" | "data";
 
 export function RightPanel() {
-  const { readOnly } = useEditor();
-  const [tab, setTab] = useState<RightPanelTab>(readOnly ? "review" : "properties");
+  const { readOnly, selectedObject, canvas } = useEditor();
+  const activeObject = canvas?.getActiveObject() ?? selectedObject;
+  const nativeShapeSelected = isNativeShape(activeObject);
+  const [tab, setTab] = useState<RightPanelTab>(readOnly ? "review" : nativeShapeSelected ? "shape" : "properties");
 
   useEffect(() => {
     if (readOnly && tab !== "review") setTab("review");
   }, [readOnly, tab]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    if (nativeShapeSelected && tab === "properties") setTab("shape");
+    if (!nativeShapeSelected && tab === "shape") setTab("properties");
+  }, [nativeShapeSelected, readOnly, tab]);
 
   useEffect(() => {
     const open = (event: Event) => {
@@ -26,7 +36,7 @@ export function RightPanel() {
         if (requested === "review") setTab("review");
         return;
       }
-      if (["properties", "layers", "resize", "audit", "review", "data"].includes(requested)) setTab(requested);
+      if (["properties", "shape", "layers", "resize", "audit", "review", "data"].includes(requested)) setTab(requested);
     };
     window.addEventListener("ddone:open-right-panel", open);
     return () => window.removeEventListener("ddone:open-right-panel", open);
@@ -34,15 +44,17 @@ export function RightPanel() {
 
   const content = readOnly || tab === "review"
     ? <ReviewPanel />
-    : tab === "properties"
-      ? <RightSidebar />
-      : tab === "layers"
-        ? <LayersPanel />
-        : tab === "resize"
-          ? <SmartResizePanel />
-          : tab === "audit"
-            ? <DesignAuditPanel />
-            : <TemplateDataPanel />;
+    : tab === "shape"
+      ? <NativeShapeInspector />
+      : tab === "properties"
+        ? <RightSidebar />
+        : tab === "layers"
+          ? <LayersPanel />
+          : tab === "resize"
+            ? <SmartResizePanel />
+            : tab === "audit"
+              ? <DesignAuditPanel />
+              : <TemplateDataPanel />;
 
   const buttonClass = (value: RightPanelTab) => `grid h-8 w-8 place-items-center rounded-lg border-0 cursor-pointer ${tab === value ? "bg-violet-600 text-white shadow-sm" : "bg-transparent text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"}`;
 
@@ -52,6 +64,7 @@ export function RightPanel() {
         <div><strong class="block text-[9px] font-semibold text-zinc-600">Pannello</strong><span class="block text-[7px] text-zinc-400">Proprietà, livelli e revisione</span></div>
         <div class="flex rounded-xl border border-zinc-200 bg-zinc-50 p-0.5">
           {!readOnly && <button aria-label="Proprietà" title="Proprietà" onClick={() => setTab("properties")} class={buttonClass("properties")}><SlidersHorizontal size={13} /></button>}
+          {!readOnly && nativeShapeSelected && <button aria-label="Forma nativa" title="Forma nativa" onClick={() => setTab("shape")} class={buttonClass("shape")}><CircleDashed size={13} /></button>}
           {!readOnly && <button aria-label="Livelli" title="Livelli" onClick={() => setTab("layers")} class={buttonClass("layers")}><Layers3 size={13} /></button>}
           {!readOnly && <button aria-label="Smart Resize" title="Smart Resize" onClick={() => setTab("resize")} class={buttonClass("resize")}><Maximize2 size={13} /></button>}
           {!readOnly && <button aria-label="Controllo design" title="Controllo design" onClick={() => setTab("audit")} class={buttonClass("audit")}><BadgeCheck size={13} /></button>}

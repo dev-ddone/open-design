@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { BookmarkPlus, Check, Paintbrush, Save, Sparkles, Trash2, X } from "lucide-preact";
 import * as fabric from "fabric";
+import { isNativeShape, readNativeShapeData, rebuildNativeShape, type NativeShapeData } from "../canvas/native-shapes";
 import { useEditor } from "../context";
 
 interface StyleRecipe {
@@ -31,6 +32,9 @@ const BUILTIN_RECIPES: StyleRecipe[] = [
   { id: "dark-premium", name: "Dark premium", description: "Superficie scura con accento viola", fill: "#18181b", textColor: "#ffffff", stroke: "#6d5dfc", strokeWidth: 2, opacity: 1, radius: 20, shadowColor: "rgba(0,0,0,0.42)", shadowBlur: 24, shadowOffsetY: 14 },
   { id: "monochrome", name: "Monochrome", description: "Bianco, nero e grigi per documenti puliti", fill: "#f4f4f5", textColor: "#18181b", stroke: "#71717a", strokeWidth: 1, opacity: 1, radius: 8, shadowColor: "rgba(0,0,0,0.08)", shadowBlur: 8, shadowOffsetY: 4 },
   { id: "product", name: "Product focus", description: "Ombra da catalogo e contorno discreto", fill: "#ffffff", textColor: "#18181b", stroke: "#d4d4d8", strokeWidth: 1, opacity: 1, radius: 16, shadowColor: "rgba(15,23,42,0.28)", shadowBlur: 34, shadowOffsetY: 22 },
+  { id: "luxury-gold", name: "Luxury gold", description: "Nero profondo, bordo oro e contrasto premium", fill: "#17120d", textColor: "#fff7d6", stroke: "#d4a72c", strokeWidth: 3, opacity: 1, radius: 14, shadowColor: "rgba(86,57,0,.34)", shadowBlur: 20, shadowOffsetY: 8 },
+  { id: "blueprint", name: "Blueprint", description: "Blu tecnico, linee chiare e bordi precisi", fill: "#0f3b68", textColor: "#e0f2fe", stroke: "#7dd3fc", strokeWidth: 2, opacity: 1, radius: 4, shadowColor: "rgba(3,18,36,.22)", shadowBlur: 8, shadowOffsetY: 4 },
+  { id: "pastel-outline", name: "Pastel outline", description: "Riempimento delicato e contorno colorato", fill: "#f5f3ff", textColor: "#4c1d95", stroke: "#a78bfa", strokeWidth: 3, opacity: 1, radius: 24, shadowColor: "rgba(124,58,237,.12)", shadowBlur: 14, shadowOffsetY: 6 },
 ];
 
 function loadCustomRecipes(): StyleRecipe[] {
@@ -48,34 +52,54 @@ function isText(object: fabric.FabricObject): object is fabric.Textbox | fabric.
   return object instanceof fabric.Textbox || object instanceof fabric.IText || object instanceof fabric.Text;
 }
 
-function applyRecipeToObject(object: fabric.FabricObject, recipe: StyleRecipe, intensity: number): void {
+function nativeRecipeData(data: NativeShapeData, recipe: StyleRecipe, intensity: number): NativeShapeData {
   const mixOpacity = Math.max(0.1, Math.min(1, intensity));
-  const updates: Record<string, unknown> = {};
-  if (recipe.opacity !== undefined) updates.opacity = 1 - (1 - recipe.opacity) * mixOpacity;
-  if (recipe.stroke !== undefined) updates.stroke = recipe.stroke;
-  if (recipe.strokeWidth !== undefined) updates.strokeWidth = recipe.strokeWidth * mixOpacity;
-  if (recipe.blendMode) updates.globalCompositeOperation = recipe.blendMode;
-  if (isText(object)) {
-    if (recipe.textColor) updates.fill = recipe.textColor;
-    if (recipe.fontFamily) updates.fontFamily = recipe.fontFamily;
-    if (recipe.fontWeight) updates.fontWeight = recipe.fontWeight;
-  } else if (!(object instanceof fabric.FabricImage) && recipe.fill) {
-    updates.fill = recipe.fill;
+  const next = { ...data };
+  if (recipe.fill !== undefined) {
+    next.fillMode = "solid";
+    next.fillColor = recipe.fill;
   }
-  if ("rx" in object && recipe.radius !== undefined) {
-    updates.rx = recipe.radius * mixOpacity;
-    updates.ry = recipe.radius * mixOpacity;
+  if (recipe.stroke !== undefined) next.strokeColor = recipe.stroke;
+  if (recipe.strokeWidth !== undefined) next.strokeWidth = recipe.strokeWidth * mixOpacity;
+  if (recipe.opacity !== undefined) {
+    next.fillOpacity = 1 - (1 - recipe.opacity) * mixOpacity;
+    next.strokeOpacity = 1 - (1 - recipe.opacity) * mixOpacity;
+  }
+  if (recipe.radius !== undefined && (next.kind === "rounded-rect" || next.kind === "callout")) next.cornerRadius = recipe.radius * mixOpacity;
+  return next;
+}
+
+function applyRecipeToObject(canvas: fabric.Canvas, object: fabric.FabricObject, recipe: StyleRecipe, intensity: number): fabric.FabricObject {
+  const mixOpacity = Math.max(0.1, Math.min(1, intensity));
+  let target = object;
+  if (isNativeShape(object)) {
+    const data = readNativeShapeData(object);
+    if (data) target = rebuildNativeShape(canvas, object, nativeRecipeData(data, recipe, intensity));
+  } else {
+    const updates: Record<string, unknown> = {};
+    if (recipe.opacity !== undefined) updates.opacity = 1 - (1 - recipe.opacity) * mixOpacity;
+    if (recipe.stroke !== undefined) updates.stroke = recipe.stroke;
+    if (recipe.strokeWidth !== undefined) updates.strokeWidth = recipe.strokeWidth * mixOpacity;
+    if (recipe.blendMode) updates.globalCompositeOperation = recipe.blendMode;
+    if (isText(object)) {
+      if (recipe.textColor) updates.fill = recipe.textColor;
+      if (recipe.fontFamily) updates.fontFamily = recipe.fontFamily;
+      if (recipe.fontWeight) updates.fontWeight = recipe.fontWeight;
+    } else if (!(object instanceof fabric.FabricImage) && recipe.fill) {
+      updates.fill = recipe.fill;
+    }
+    if ("rx" in object && recipe.radius !== undefined) {
+      updates.rx = recipe.radius * mixOpacity;
+      updates.ry = recipe.radius * mixOpacity;
+    }
+    object.set(updates);
   }
   if (recipe.shadowColor && recipe.shadowBlur !== undefined) {
-    updates.shadow = new fabric.Shadow({
-      color: recipe.shadowColor,
-      blur: recipe.shadowBlur * mixOpacity,
-      offsetX: 0,
-      offsetY: (recipe.shadowOffsetY ?? 0) * mixOpacity,
-    });
+    target.set({ shadow: new fabric.Shadow({ color: recipe.shadowColor, blur: recipe.shadowBlur * mixOpacity, offsetX: 0, offsetY: (recipe.shadowOffsetY ?? 0) * mixOpacity }) });
   }
-  object.set(updates);
-  object.setCoords();
+  if (recipe.blendMode) target.set({ globalCompositeOperation: recipe.blendMode });
+  target.setCoords();
+  return target;
 }
 
 export function StyleRecipesPanel() {
@@ -101,9 +125,13 @@ export function StyleRecipesPanel() {
     if (!canvas) return [] as fabric.FabricObject[];
     const active = canvas.getActiveObjects();
     if (scope === "selection") return active;
-    if (scope === "page") return canvas.getObjects().filter((object) => !(object as any)._isBgImage);
+    if (scope === "page") return canvas.getObjects().filter((object) => !(object as { _isBgImage?: boolean })._isBgImage);
     const prototype = active[0];
     if (!prototype) return [];
+    if (isNativeShape(prototype)) {
+      const kind = readNativeShapeData(prototype)?.kind;
+      return canvas.getObjects().filter((object) => isNativeShape(object) && readNativeShapeData(object)?.kind === kind);
+    }
     return canvas.getObjects().filter((object) => object.type === prototype.type);
   };
 
@@ -114,10 +142,10 @@ export function StyleRecipesPanel() {
       setMessage("Seleziona almeno un oggetto oppure scegli tutta la pagina.");
       return;
     }
-    for (const object of objects) applyRecipeToObject(object, selected, intensity);
+    const updated = objects.map((object) => applyRecipeToObject(canvas, object, selected, intensity));
     canvas.requestRenderAll();
-    for (const object of objects) canvas.fire("object:modified", { target: object } as any);
-    setMessage(`${selected.name} applicato a ${objects.length} oggetti.`);
+    for (const object of updated) if (!isNativeShape(object)) canvas.fire("object:modified", { target: object } as never);
+    setMessage(`${selected.name} applicato a ${updated.length} oggetti.`);
   };
 
   const capture = () => {
@@ -127,17 +155,18 @@ export function StyleRecipesPanel() {
       setMessage("Seleziona un oggetto da cui salvare lo stile.");
       return;
     }
-    const source = object as any;
+    const nativeData = readNativeShapeData(object);
+    const source = object as fabric.FabricObject & { rx?: number; shadow?: fabric.Shadow; fontFamily?: string; fontWeight?: string | number };
     const recipe: StyleRecipe = {
       id: `custom-${crypto.randomUUID()}`,
       name: name.trim() || "Stile personalizzato",
       description: "Ricetta salvata dalla selezione corrente",
-      fill: typeof source.fill === "string" ? source.fill : undefined,
+      fill: nativeData?.fillMode === "solid" ? nativeData.fillColor : typeof source.fill === "string" ? source.fill : undefined,
       textColor: isText(object) && typeof source.fill === "string" ? source.fill : undefined,
-      stroke: typeof source.stroke === "string" ? source.stroke : undefined,
-      strokeWidth: Number(source.strokeWidth) || 0,
-      opacity: Number(source.opacity) || 1,
-      radius: Number(source.rx) || 0,
+      stroke: nativeData?.strokeColor ?? (typeof source.stroke === "string" ? source.stroke : undefined),
+      strokeWidth: nativeData?.strokeWidth ?? (Number(source.strokeWidth) || 0),
+      opacity: nativeData ? Math.min(nativeData.fillOpacity, nativeData.strokeOpacity) : (Number(source.opacity) || 1),
+      radius: nativeData?.cornerRadius ?? (Number(source.rx) || 0),
       shadowColor: source.shadow?.color,
       shadowBlur: Number(source.shadow?.blur) || 0,
       shadowOffsetY: Number(source.shadow?.offsetY) || 0,
@@ -163,10 +192,10 @@ export function StyleRecipesPanel() {
   return (
     <div class="fixed inset-0 z-[165] grid place-items-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-labelledby="style-recipes-title">
       <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <header class="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-fuchsia-100 text-fuchsia-700"><Paintbrush size={19} /></span><div><h2 id="style-recipes-title" class="m-0 text-sm font-semibold text-zinc-900">Ricette di stile</h2><p class="mb-0 mt-1 text-[9px] text-zinc-500">Preset configurabili per selezioni, tipi di oggetto o pagina intera.</p></div></div><button onClick={() => setOpen(false)} class="grid h-9 w-9 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 cursor-pointer"><X size={16} /></button></header>
+        <header class="flex items-center justify-between border-b border-zinc-200 px-5 py-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-fuchsia-100 text-fuchsia-700"><Paintbrush size={19} /></span><div><h2 id="style-recipes-title" class="m-0 text-sm font-semibold text-zinc-900">Ricette di stile</h2><p class="mb-0 mt-1 text-[9px] text-zinc-500">Preset persistenti per selezioni, tipi di oggetto o pagina intera.</p></div></div><button onClick={() => setOpen(false)} class="grid h-9 w-9 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-500 cursor-pointer"><X size={16} /></button></header>
         <div class="grid min-h-0 flex-1 md:grid-cols-[1fr_320px]">
           <main class="overflow-y-auto p-5"><div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">{recipes.map((recipe) => <button key={recipe.id} onClick={() => setSelectedId(recipe.id)} class={`group relative overflow-hidden rounded-xl border p-3 text-left cursor-pointer ${selectedId === recipe.id ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-zinc-200 bg-white hover:border-zinc-300"}`}><div class="mb-3 flex h-20 items-center justify-center rounded-lg" style={{ background: recipe.fill ?? recipe.background ?? "#f4f4f5", boxShadow: recipe.shadowColor ? `0 ${recipe.shadowOffsetY ?? 4}px ${recipe.shadowBlur ?? 8}px ${recipe.shadowColor}` : undefined, border: `${recipe.strokeWidth ?? 0}px solid ${recipe.stroke ?? "transparent"}`, borderRadius: `${recipe.radius ?? 8}px` }}><span style={{ color: recipe.textColor ?? "#18181b", fontFamily: recipe.fontFamily, fontWeight: recipe.fontWeight }}>Aa</span></div><strong class="block text-[10px] text-zinc-800">{recipe.name}</strong><span class="mt-1 block text-[8px] leading-relaxed text-zinc-400">{recipe.description}</span>{recipe.id.startsWith("custom-") && <span onClick={(event) => { event.stopPropagation(); remove(recipe); }} class="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg bg-white/90 text-red-500 opacity-0 shadow group-hover:opacity-100"><Trash2 size={12} /></span>}{selectedId === recipe.id && <span class="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-violet-600 text-white"><Check size={12} /></span>}</button>)}</div></main>
-          <aside class="overflow-y-auto border-l border-zinc-200 bg-zinc-50 p-5"><div class="flex items-center gap-2"><Sparkles size={14} class="text-violet-600" /><strong class="text-[10px] text-zinc-800">Applica ricetta</strong></div><p class="mt-2 text-[8px] leading-relaxed text-zinc-500">Le proprietà non compatibili con il tipo di oggetto vengono ignorate.</p><label class="mt-4 block text-[8px] font-semibold text-zinc-500">Ambito<select value={scope} onChange={(event) => setScope((event.target as HTMLSelectElement).value as typeof scope)} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[9px]"><option value="selection">Selezione corrente</option><option value="type">Tutti dello stesso tipo</option><option value="page">Tutta la pagina</option></select></label><label class="mt-4 block text-[8px] font-semibold text-zinc-500">Intensità {Math.round(intensity * 100)}%<input type="range" min="0.1" max="1" step="0.05" value={intensity} onInput={(event) => setIntensity(Number((event.target as HTMLInputElement).value))} class="mt-2 w-full accent-violet-600" /></label><button onClick={apply} class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-0 bg-violet-600 text-[9px] font-semibold text-white cursor-pointer"><Paintbrush size={13} /> Applica {selected?.name}</button><div class="my-5 border-t border-zinc-200" /><div class="flex items-center gap-2"><BookmarkPlus size={14} class="text-zinc-500" /><strong class="text-[10px] text-zinc-700">Salva dalla selezione</strong></div><input value={name} onInput={(event) => setName((event.target as HTMLInputElement).value)} placeholder="Nome ricetta" class="mt-3 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[9px]" /><button onClick={capture} class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-[8px] font-semibold text-zinc-600 cursor-pointer hover:border-violet-300"><Save size={12} /> Salva stile corrente</button>{message && <p class="mt-4 rounded-lg bg-white p-3 text-[8px] leading-relaxed text-zinc-600">{message}</p>}</aside>
+          <aside class="overflow-y-auto border-l border-zinc-200 bg-zinc-50 p-5"><div class="flex items-center gap-2"><Sparkles size={14} class="text-violet-600" /><strong class="text-[10px] text-zinc-800">Applica ricetta</strong></div><p class="mt-2 text-[8px] leading-relaxed text-zinc-500">Le forme native aggiornano anche i metadati semantici, non soltanto l’anteprima.</p><label class="mt-4 block text-[8px] font-semibold text-zinc-500">Ambito<select value={scope} onChange={(event) => setScope((event.target as HTMLSelectElement).value as typeof scope)} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[9px]"><option value="selection">Selezione corrente</option><option value="type">Tutti dello stesso tipo</option><option value="page">Tutta la pagina</option></select></label><label class="mt-4 block text-[8px] font-semibold text-zinc-500">Intensità {Math.round(intensity * 100)}%<input type="range" min="0.1" max="1" step="0.05" value={intensity} onInput={(event) => setIntensity(Number((event.target as HTMLInputElement).value))} class="mt-2 w-full accent-violet-600" /></label><button onClick={apply} class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl border-0 bg-violet-600 text-[9px] font-semibold text-white cursor-pointer"><Paintbrush size={13} /> Applica {selected?.name}</button><div class="my-5 border-t border-zinc-200" /><div class="flex items-center gap-2"><BookmarkPlus size={14} class="text-zinc-500" /><strong class="text-[10px] text-zinc-700">Salva dalla selezione</strong></div><input value={name} onInput={(event) => setName((event.target as HTMLInputElement).value)} placeholder="Nome ricetta" class="mt-3 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[9px]" /><button onClick={capture} class="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white text-[8px] font-semibold text-zinc-600 cursor-pointer hover:border-violet-300"><Save size={12} /> Salva stile corrente</button>{message && <p class="mt-4 rounded-lg bg-white p-3 text-[8px] leading-relaxed text-zinc-600">{message}</p>}</aside>
         </div>
       </div>
     </div>

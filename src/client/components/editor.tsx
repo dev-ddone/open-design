@@ -18,6 +18,7 @@ import { StyleRecipesPanel } from "./style-recipes-panel";
 import { StyleRecipesLauncher } from "./style-recipes-launcher";
 import { SmartPlacementGuard } from "./smart-placement-guard";
 import { AdvancedEffectsHost } from "./advanced-effects-host";
+import { NativeShapeControlsHost } from "./native-shape-controls-host";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -26,6 +27,7 @@ export function Editor() {
     <div class="relative flex h-full w-full flex-col overflow-hidden">
       <ElementPreferencesSync />
       <SmartPlacementGuard />
+      <NativeShapeControlsHost />
       <Toolbar />
       <div class="flex min-h-10 shrink-0 items-center justify-end gap-2 border-b border-zinc-200 bg-zinc-50/90 px-3" data-testid="editor-utility-dock">
         <StyleRecipesLauncher />

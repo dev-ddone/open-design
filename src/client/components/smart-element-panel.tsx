@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { BarChart3, Grid2X2, ImagePlus, LayoutPanelTop, Save, Table2 } from "lucide-preact";
+import { BarChart3, Grid2X2, ImagePlus, LayoutPanelTop, Plus, Save, Table2, Trash2 } from "lucide-preact";
 import { useEditor } from "../context";
 import type { AssetSelection } from "./asset-picker-host";
 import {
+  chartSeriesFor,
   isSmartElement,
   readSmartElementData,
   rebuildSmartElement,
   resizeTableData,
   type SmartChartData,
+  type SmartChartSeries,
+  type SmartChartType,
+  type SmartChartValueFormat,
   type SmartElementData,
   type SmartFrameData,
   type SmartGridData,
@@ -51,7 +55,6 @@ function TableEditor({ data, onChange }: { data: SmartTableData; onChange: (data
 function openAssetPicker(onSelect: (url: string) => void) {
   window.dispatchEvent(new CustomEvent("ddone:open-asset-picker", { detail: { purpose: "callback", onSelect: (selection: AssetSelection) => onSelect(selection.url) } }));
 }
-
 function ImageSlotsEditor({ data, onChange }: { data: SmartGridData | SmartFrameData; onChange: (data: SmartGridData | SmartFrameData) => void }) {
   const slots = data.type === "grid" ? data.slots : [{ x: 0, y: 0, width: data.width, height: data.height, label: "Foto", imageUrl: data.imageUrl }];
   const setImage = (index: number, imageUrl: string) => {
@@ -69,26 +72,52 @@ function ImageSlotsEditor({ data, onChange }: { data: SmartGridData | SmartFrame
   </div>;
 }
 
-function parseSeries(labels: string, values: string): { labels: string[]; values: number[] } {
-  const parsedLabels = labels.split(/[,;\n]/).map((value) => value.trim()).filter(Boolean);
-  const parsedValues = values.split(/[,;\n]/).map((value) => Number(value.trim().replace(",", "."))).filter(Number.isFinite);
-  const length = Math.max(1, Math.min(30, Math.max(parsedLabels.length, parsedValues.length)));
-  return { labels: Array.from({ length }, (_, index) => parsedLabels[index] ?? `Voce ${index + 1}`), values: Array.from({ length }, (_, index) => parsedValues[index] ?? 0) };
+function parseValues(value: string): number[] {
+  return value.split(/[,;\n\t]/).map((entry) => Number(entry.trim().replace(",", "."))).filter(Number.isFinite).slice(0, 50);
+}
+function normalizeSeries(labels: string[], series: SmartChartSeries[]): SmartChartSeries[] {
+  return series.map((entry) => ({ ...entry, values: Array.from({ length: Math.max(1, labels.length) }, (_, index) => Number(entry.values[index]) || 0) }));
+}
+function importChartTable(text: string, fallbackColor: string): { labels: string[]; series: SmartChartSeries[] } | null {
+  const rows = text.trim().split(/\r?\n/).map((row) => row.split(/\t|;/).map((cell) => cell.trim())).filter((row) => row.some(Boolean));
+  if (rows.length < 2 || rows[0].length < 2) return null;
+  const labels = rows[0].slice(1).filter(Boolean).slice(0, 50);
+  const palette = [fallbackColor, "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b", "#2563eb", "#ef4444", "#84cc16"];
+  const series = rows.slice(1, 9).map((row, index) => ({ name: row[0] || `Serie ${index + 1}`, values: row.slice(1).map((cell) => Number(cell.replace(",", ".")) || 0).slice(0, labels.length), color: palette[index % palette.length] }));
+  return { labels, series: normalizeSeries(labels, series) };
 }
 
 function ChartEditor({ data, onChange }: { data: SmartChartData; onChange: (data: SmartChartData) => void }) {
-  const [labels, setLabels] = useState(data.labels.join(", "));
-  const [values, setValues] = useState(data.values.join(", "));
-  useEffect(() => { setLabels(data.labels.join(", ")); setValues(data.values.join(", ")); }, [data.variant]);
-  const applySeries = () => onChange({ ...data, ...parseSeries(labels, values) });
-  const updateColor = (index: number, value: string) => { const colors = [...data.colors]; colors[index] = value; onChange({ ...data, colors }); };
+  const series = chartSeriesFor(data);
+  const update = (changes: Partial<SmartChartData>) => onChange({ ...data, ...changes });
+  const applySeries = (nextLabels: string[], nextSeries: SmartChartSeries[]) => {
+    const normalized = normalizeSeries(nextLabels, nextSeries);
+    onChange({ ...data, labels: nextLabels, series: normalized, values: normalized[0]?.values ?? [], colors: normalized.map((entry) => entry.color) });
+  };
+  const updateSeries = (index: number, changes: Partial<SmartChartSeries>) => applySeries(data.labels, series.map((entry, currentIndex) => currentIndex === index ? { ...entry, ...changes } : entry));
+  const addSeries = () => {
+    if (series.length >= 8) return;
+    const palette = ["#7c3aed", "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b", "#2563eb", "#ef4444", "#84cc16"];
+    applySeries(data.labels, [...series, { name: `Serie ${series.length + 1}`, values: data.labels.map(() => 0), color: palette[series.length % palette.length] }]);
+  };
+  const removeSeries = (index: number) => { if (series.length > 1) applySeries(data.labels, series.filter((_, currentIndex) => currentIndex !== index)); };
+  const chartTypes: Array<{ value: SmartChartType; label: string }> = [
+    { value: "bar", label: "Barre" }, { value: "grouped-bar", label: "Barre raggruppate" }, { value: "stacked-bar", label: "Barre impilate" },
+    { value: "line", label: "Linee" }, { value: "area", label: "Area" }, { value: "donut", label: "Anello" }, { value: "pie", label: "Torta" },
+    { value: "radar", label: "Radar" }, { value: "progress", label: "Progress ring" },
+  ];
   return <div class="flex flex-col gap-4">
-    <label class="block text-[9px] font-semibold text-zinc-500">Tipo grafico<select value={data.chartType} onChange={(event) => onChange({ ...data, chartType: (event.target as HTMLSelectElement).value as SmartChartData["chartType"] })} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[10px]"><option value="bar">Barre</option><option value="line">Linea</option><option value="donut">Anello</option></select></label>
-    <TextField label="Titolo" value={data.title} onChange={(title) => onChange({ ...data, title })} />
-    <div class="grid grid-cols-2 gap-2"><NumberField label="Larghezza" value={data.width} min={260} max={2200} onChange={(width) => onChange({ ...data, width })} /><NumberField label="Altezza" value={data.height} min={220} max={1600} onChange={(height) => onChange({ ...data, height })} /><ColorField label="Sfondo" value={data.backgroundColor} onChange={(backgroundColor) => onChange({ ...data, backgroundColor })} /><ColorField label="Testo" value={data.textColor} onChange={(textColor) => onChange({ ...data, textColor })} /><ColorField label="Griglia" value={data.gridColor} onChange={(gridColor) => onChange({ ...data, gridColor })} /></div>
-    <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><TextField label="Etichette separate da virgola" value={labels} onChange={setLabels} /><div class="mt-2"><TextField label="Valori separati da virgola" value={values} onChange={setValues} /></div><button onClick={applySeries} class="mt-2 h-8 w-full rounded-lg border border-violet-200 bg-white text-[8px] font-semibold text-violet-700 cursor-pointer">Aggiorna serie</button></div>
-    <div><strong class="mb-2 block text-[9px] text-zinc-600">Palette serie</strong><div class="grid grid-cols-5 gap-2">{data.colors.slice(0, 5).map((color, index) => <input key={index} type="color" value={color} onInput={(event) => updateColor(index, (event.target as HTMLInputElement).value)} class="h-9 w-full rounded-lg border border-zinc-200 bg-white p-1" />)}</div></div>
-    <div class="grid grid-cols-2 gap-2"><Toggle label="Mostra valori" checked={data.showValues} onChange={(showValues) => onChange({ ...data, showValues })} /><Toggle label="Mostra legenda" checked={data.showLegend} onChange={(showLegend) => onChange({ ...data, showLegend })} /><Toggle label="Angoli arrotondati" checked={data.rounded} onChange={(rounded) => onChange({ ...data, rounded })} /></div>
+    <label class="block text-[9px] font-semibold text-zinc-500">Tipo grafico<select value={data.chartType} onChange={(event) => update({ chartType: (event.target as HTMLSelectElement).value as SmartChartType })} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[10px]">{chartTypes.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label>
+    <TextField label="Titolo" value={data.title} onChange={(title) => update({ title })} />
+    <div class="grid grid-cols-2 gap-2"><NumberField label="Larghezza" value={data.width} min={260} max={2200} onChange={(width) => update({ width })} /><NumberField label="Altezza" value={data.height} min={220} max={1600} onChange={(height) => update({ height })} /><ColorField label="Sfondo" value={data.backgroundColor} onChange={(backgroundColor) => update({ backgroundColor })} /><ColorField label="Testo" value={data.textColor} onChange={(textColor) => update({ textColor })} /><ColorField label="Griglia" value={data.gridColor} onChange={(gridColor) => update({ gridColor })} /></div>
+    <div class="grid grid-cols-2 gap-2"><label class="block text-[9px] font-semibold text-zinc-500">Formato valori<select value={data.valueFormat ?? "number"} onChange={(event) => update({ valueFormat: (event.target as HTMLSelectElement).value as SmartChartValueFormat })} class="mt-1 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-[9px]"><option value="number">Numero</option><option value="percent">Percentuale</option><option value="currency">Valuta</option></select></label>{data.valueFormat === "currency" ? <TextField label="Simbolo valuta" value={data.currencySymbol ?? "€"} onChange={(currencySymbol) => update({ currencySymbol })} /> : <NumberField label="Valore massimo" value={data.maxValue ?? 100} min={1} max={1000000000} onChange={(maxValue) => update({ maxValue })} />}</div>
+    <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><TextField label="Etichette separate da virgola" value={data.labels.join(", ")} onChange={(value) => { const labels = value.split(/[,;\n]/).map((entry) => entry.trim()).filter(Boolean).slice(0, 50); applySeries(labels.length ? labels : ["Voce 1"], series); }} /></div>
+    <div>
+      <div class="mb-2 flex items-center justify-between"><strong class="text-[9px] text-zinc-600">Serie dati</strong><button disabled={series.length >= 8} onClick={addSeries} class="inline-flex h-7 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 text-[8px] font-semibold text-violet-700 cursor-pointer disabled:opacity-40"><Plus size={11} /> Serie</button></div>
+      <div class="flex flex-col gap-2">{series.map((entry, index) => <div key={index} class="rounded-xl border border-zinc-200 bg-white p-2.5"><div class="mb-2 flex items-center gap-2"><input type="color" value={entry.color} onInput={(event) => updateSeries(index, { color: (event.target as HTMLInputElement).value })} class="h-8 w-10 rounded-lg border border-zinc-200 bg-white p-1" /><input value={entry.name} onInput={(event) => updateSeries(index, { name: (event.target as HTMLInputElement).value })} class="h-8 min-w-0 flex-1 rounded-lg border border-zinc-200 px-2 text-[9px] outline-none focus:border-violet-400" /><button disabled={series.length <= 1} onClick={() => removeSeries(index)} class="grid h-8 w-8 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-400 cursor-pointer hover:text-red-500 disabled:opacity-30"><Trash2 size={12} /></button></div><textarea value={entry.values.join(", ")} rows={2} onInput={(event) => updateSeries(index, { values: parseValues((event.target as HTMLTextAreaElement).value) })} class="w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50 p-2 font-mono text-[9px] outline-none focus:border-violet-400" placeholder="10, 25, 42" /></div>)}</div>
+    </div>
+    <label class="block text-[9px] font-semibold text-zinc-500">Incolla tabella da Excel / CSV<textarea rows={4} placeholder={'Serie\tGen\tFeb\tMar\nVendite\t20\t36\t48\nOrdini\t14\t25\t31'} onBlur={(event) => { const imported = importChartTable((event.target as HTMLTextAreaElement).value, series[0]?.color ?? "#7c3aed"); if (imported) applySeries(imported.labels, imported.series); }} class="mt-1 w-full resize-y rounded-xl border border-zinc-200 bg-white p-2 font-mono text-[9px] outline-none focus:border-violet-400" /></label>
+    <div class="grid grid-cols-2 gap-2"><Toggle label="Mostra valori" checked={data.showValues} onChange={(showValues) => update({ showValues })} /><Toggle label="Mostra legenda" checked={data.showLegend} onChange={(showLegend) => update({ showLegend })} /><Toggle label="Mostra griglia" checked={data.showGrid !== false} onChange={(showGrid) => update({ showGrid })} /><Toggle label="Angoli arrotondati" checked={data.rounded} onChange={(rounded) => update({ rounded })} /></div>
   </div>;
 }
 
