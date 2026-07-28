@@ -18,7 +18,6 @@ import { StyleRecipesPanel } from "./style-recipes-panel";
 import { StyleRecipesLauncher } from "./style-recipes-launcher";
 import { SmartPlacementGuard } from "./smart-placement-guard";
 import { AdvancedEffectsHost } from "./advanced-effects-host";
-import { WebAssetsHost } from "./web-assets-host";
 import { useEditorShortcuts } from "../hooks/use-editor-shortcuts";
 
 export function Editor() {
@@ -28,9 +27,9 @@ export function Editor() {
       <ElementPreferencesSync />
       <SmartPlacementGuard />
       <Toolbar />
-      <div class="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50/90 px-3" data-testid="editor-utility-dock">
-        <div class="min-w-0"><strong class="block text-[9px] font-semibold text-zinc-600">Risorse rapide</strong><span class="hidden text-[7px] text-zinc-400 sm:block">Contenuti web, stili e notifiche senza coprire il canvas.</span></div>
-        <div class="flex shrink-0 items-center gap-2"><WebAssetsHost /><StyleRecipesLauncher /><NotificationCenter /></div>
+      <div class="flex min-h-10 shrink-0 items-center justify-end gap-2 border-b border-zinc-200 bg-zinc-50/90 px-3" data-testid="editor-utility-dock">
+        <StyleRecipesLauncher />
+        <NotificationCenter />
       </div>
       <CollaborationStatusBanner />
       <SelectionToolbar />
