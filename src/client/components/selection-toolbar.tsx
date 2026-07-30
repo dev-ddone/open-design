@@ -29,6 +29,10 @@ import { useEditor } from "../context";
 import type { DDoneFabricObject } from "../canvas-model";
 import { extractVectorPalette, replaceVectorColor } from "../canvas/media-effects";
 import { isSmartElement } from "../canvas/smart-elements";
+import translations from "../translations";
+import { config } from "../../server/config";
+
+const lang = config.lang;
 
 const VECTOR_COLORS = ["#111827", "#ffffff", "#7c3aed", "#ec4899", "#ef4444", "#f59e0b", "#10b981", "#0ea5e9"];
 
@@ -62,13 +66,13 @@ function ToolbarButton({
 
 function NumericField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
   return (
-    <label class="block text-[8px] font-semibold text-zinc-400">
+    <label class="block font-semibold text-[8px] text-zinc-400">
       {label}
       <input
         type="number"
         value={Number.isFinite(value) ? Math.round(value * 100) / 100 : 0}
         onInput={(event) => onChange(Number((event.target as HTMLInputElement).value))}
-        class="mt-1 h-8 w-full rounded-md border border-zinc-200 px-2 text-[10px] text-zinc-700 outline-none focus:border-violet-400"
+        class="mt-1 px-2 border border-zinc-200 focus:border-violet-400 rounded-md outline-none w-full h-8 text-[10px] text-zinc-700"
       />
     </label>
   );
@@ -139,7 +143,7 @@ export function SelectionToolbar() {
   };
 
   return (
-    <div class="relative z-30 flex min-h-11 items-center gap-1 overflow-x-auto border-b border-zinc-200 bg-white px-3 shadow-sm">
+    <div class="z-30 relative flex items-center gap-1 bg-white shadow-sm px-3 border-zinc-200 border-b min-h-11 overflow-x-auto">
       {image && (
         <>
           <ToolbarButton label="Modifica" icon={SlidersHorizontal} onClick={() => openTool("adjust")} />
@@ -152,32 +156,32 @@ export function SelectionToolbar() {
       {smart && <ToolbarButton label="Modifica struttura" icon={PanelTopOpen} onClick={() => openTool("smart-element")} />}
 
       {vector && (
-        <div class="flex items-center gap-1 border-l border-zinc-200 pl-2">
+        <div class="flex items-center gap-1 pl-2 border-zinc-200 border-l">
           <Palette size={14} class="text-zinc-400" />
           {palette.length > 1 ? palette.slice(0, 8).map((color, index) => (
-            <label key={`${color}-${index}`} title={`Sostituisci ${color}`} class="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border border-zinc-300" style={{ background: color }}>
-              <input type="color" value={color} onInput={(event) => replacePaletteColor(color, (event.target as HTMLInputElement).value)} class="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+            <label key={`${color}-${index}`} title={`Sostituisci ${color}`} class="relative border border-zinc-300 rounded-full w-7 h-7 overflow-hidden cursor-pointer" style={{ background: color }}>
+              <input type="color" value={color} onInput={(event) => replacePaletteColor(color, (event.target as HTMLInputElement).value)} class="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
             </label>
           )) : (
             <>
               {VECTOR_COLORS.map((color) => (
-                <button key={color} title={`Colore ${color}`} onClick={() => recolorSelectedVector(color)} class="h-6 w-6 rounded-full border border-zinc-300 cursor-pointer transition hover:scale-110" style={{ background: color }} />
+                <button key={color} title={`Colore ${color}`} onClick={() => recolorSelectedVector(color)} class="border border-zinc-300 rounded-full w-6 h-6 hover:scale-110 transition cursor-pointer" style={{ background: color }} />
               ))}
-              <input type="color" title="Colore personalizzato" onInput={(event) => recolorSelectedVector((event.target as HTMLInputElement).value)} class="h-7 w-7 rounded border border-zinc-200 bg-transparent p-0 cursor-pointer" />
+              <input type="color" title={translations[lang].customColor} onInput={(event) => recolorSelectedVector((event.target as HTMLInputElement).value)} class="bg-transparent p-0 border border-zinc-200 rounded w-7 h-7 cursor-pointer" />
             </>
           )}
         </div>
       )}
 
-      <div class="relative border-l border-zinc-200 pl-1">
-        <button onClick={() => setPrecisionOpen((value) => !value)} class="inline-flex h-8 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2.5 text-[10px] font-semibold text-zinc-700 cursor-pointer hover:bg-zinc-100">
+      <div class="relative pl-1 border-zinc-200 border-l">
+        <button onClick={() => setPrecisionOpen((value) => !value)} class="inline-flex items-center gap-1.5 bg-transparent hover:bg-zinc-100 px-2.5 border-0 rounded-lg h-8 font-semibold text-[10px] text-zinc-700 cursor-pointer">
           <Move size={14} /> Precisione
         </button>
         {precisionOpen && (
           <>
-            <div class="fixed inset-0 z-30" onClick={() => setPrecisionOpen(false)} />
-            <div class="absolute left-0 top-full z-40 mt-1 w-72 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl">
-              <div class="mb-3 grid grid-cols-2 gap-2">
+            <div class="z-30 fixed inset-0" onClick={() => setPrecisionOpen(false)} />
+            <div class="top-full left-0 z-40 absolute bg-white shadow-xl mt-1 p-3 border border-zinc-200 rounded-xl w-72">
+              <div class="gap-2 grid grid-cols-2 mb-3">
                 <NumericField label="X" value={target.left ?? 0} onChange={(value) => updatePosition("left", value)} />
                 <NumericField label="Y" value={target.top ?? 0} onChange={(value) => updatePosition("top", value)} />
                 <NumericField label="Larghezza" value={target.getScaledWidth()} onChange={(value) => updateSize("width", value)} />
@@ -185,37 +189,37 @@ export function SelectionToolbar() {
                 <NumericField label="Rotazione" value={target.angle ?? 0} onChange={(value) => { target.set("angle", value); notify(); }} />
                 <NumericField label="Opacità %" value={(target.opacity ?? 1) * 100} onChange={(value) => { target.set("opacity", Math.max(0, Math.min(100, value)) / 100); notify(); }} />
               </div>
-              <strong class="mb-2 block text-[9px] text-zinc-500">Allinea al canvas</strong>
-              <div class="grid grid-cols-6 gap-1">
-                <button title="Sinistra" onClick={() => align("left")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignStartVertical size={14} /></button>
-                <button title="Centro orizzontale" onClick={() => align("center-x")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignCenterVertical size={14} /></button>
-                <button title="Destra" onClick={() => align("right")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignEndVertical size={14} /></button>
-                <button title="Alto" onClick={() => align("top")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignStartHorizontal size={14} /></button>
-                <button title="Centro verticale" onClick={() => align("center-y")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignCenterHorizontal size={14} /></button>
-                <button title="Basso" onClick={() => align("bottom")} class="grid h-8 place-items-center rounded-md border border-zinc-200 bg-white hover:bg-zinc-50"><AlignEndHorizontal size={14} /></button>
+              <strong class="block mb-2 text-[9px] text-zinc-500">Allinea al canvas</strong>
+              <div class="gap-1 grid grid-cols-6">
+                <button title="Sinistra" onClick={() => align("left")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignStartVertical size={14} /></button>
+                <button title="Centro orizzontale" onClick={() => align("center-x")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignCenterVertical size={14} /></button>
+                <button title="Destra" onClick={() => align("right")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignEndVertical size={14} /></button>
+                <button title="Alto" onClick={() => align("top")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignStartHorizontal size={14} /></button>
+                <button title="Centro verticale" onClick={() => align("center-y")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignCenterHorizontal size={14} /></button>
+                <button title="Basso" onClick={() => align("bottom")} class="place-items-center grid bg-white hover:bg-zinc-50 border border-zinc-200 rounded-md h-8"><AlignEndHorizontal size={14} /></button>
               </div>
             </div>
           </>
         )}
       </div>
 
-      <div class="ml-auto flex items-center gap-0.5 border-l border-zinc-200 pl-2">
+      <div class="flex items-center gap-0.5 ml-auto pl-2 border-zinc-200 border-l">
         <ToolbarButton label="Duplica" icon={Copy} onClick={() => void duplicateSelected()} />
         <ToolbarButton label="Ribalta X" icon={FlipHorizontal2} onClick={() => flipSelected("x")} />
         <ToolbarButton label="Ribalta Y" icon={FlipVertical2} onClick={() => flipSelected("y")} />
 
         <div class="relative">
-          <button onClick={() => setPositionOpen((value) => !value)} class="inline-flex h-8 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2.5 text-[10px] font-semibold text-zinc-700 cursor-pointer hover:bg-zinc-100">
+          <button onClick={() => setPositionOpen((value) => !value)} class="inline-flex items-center gap-1.5 bg-transparent hover:bg-zinc-100 px-2.5 border-0 rounded-lg h-8 font-semibold text-[10px] text-zinc-700 cursor-pointer">
             <Layers3 size={14} /> Posizione <ChevronDown size={12} />
           </button>
           {positionOpen && (
             <>
-              <div class="fixed inset-0 z-30" onClick={() => setPositionOpen(false)} />
-              <div class="absolute right-0 top-full z-40 mt-1 w-48 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl">
-                <button onClick={() => { arrangeSelected("front"); setPositionOpen(false); }} class="flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-xs text-zinc-700 cursor-pointer hover:bg-zinc-100"><BringToFront size={14} /> Porta in primo piano</button>
-                <button onClick={() => { arrangeSelected("forward"); setPositionOpen(false); }} class="flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-xs text-zinc-700 cursor-pointer hover:bg-zinc-100"><Layers3 size={14} /> Porta avanti</button>
-                <button onClick={() => { arrangeSelected("backward"); setPositionOpen(false); }} class="flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-xs text-zinc-700 cursor-pointer hover:bg-zinc-100"><Layers3 size={14} /> Porta indietro</button>
-                <button onClick={() => { arrangeSelected("back"); setPositionOpen(false); }} class="flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left text-xs text-zinc-700 cursor-pointer hover:bg-zinc-100"><SendToBack size={14} /> Porta sullo sfondo</button>
+              <div class="z-30 fixed inset-0" onClick={() => setPositionOpen(false)} />
+              <div class="top-full right-0 z-40 absolute bg-white shadow-xl mt-1 p-1.5 border border-zinc-200 rounded-xl w-48">
+                <button onClick={() => { arrangeSelected("front"); setPositionOpen(false); }} class="flex items-center gap-2 bg-transparent hover:bg-zinc-100 px-2.5 py-2 border-0 rounded-lg w-full text-zinc-700 text-xs text-left cursor-pointer"><BringToFront size={14} /> Porta in primo piano</button>
+                <button onClick={() => { arrangeSelected("forward"); setPositionOpen(false); }} class="flex items-center gap-2 bg-transparent hover:bg-zinc-100 px-2.5 py-2 border-0 rounded-lg w-full text-zinc-700 text-xs text-left cursor-pointer"><Layers3 size={14} /> Porta avanti</button>
+                <button onClick={() => { arrangeSelected("backward"); setPositionOpen(false); }} class="flex items-center gap-2 bg-transparent hover:bg-zinc-100 px-2.5 py-2 border-0 rounded-lg w-full text-zinc-700 text-xs text-left cursor-pointer"><Layers3 size={14} /> Porta indietro</button>
+                <button onClick={() => { arrangeSelected("back"); setPositionOpen(false); }} class="flex items-center gap-2 bg-transparent hover:bg-zinc-100 px-2.5 py-2 border-0 rounded-lg w-full text-zinc-700 text-xs text-left cursor-pointer"><SendToBack size={14} /> Porta sullo sfondo</button>
               </div>
             </>
           )}
