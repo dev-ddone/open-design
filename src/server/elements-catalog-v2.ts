@@ -14,7 +14,7 @@ import {
   localPackSvg,
   searchLocalAssetPacks,
 } from "./local-asset-packs.js";
-import translations from "../client/translations/index.js";
+import translations from "../translations/index.js";
 
 const lang = config.lang;
 

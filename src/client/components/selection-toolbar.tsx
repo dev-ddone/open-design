@@ -29,7 +29,7 @@ import { useEditor } from "../context";
 import type { DDoneFabricObject } from "../canvas-model";
 import { extractVectorPalette, replaceVectorColor } from "../canvas/media-effects";
 import { isSmartElement } from "../canvas/smart-elements";
-import translations from "../translations";
+import translations from "../../translations";
 import { config } from "../../server/config";
 
 const lang = config.lang;

@@ -39,6 +39,7 @@ const translations: Record<string, Record<string, string>> = {
     to: "to",
     from: "from",
     favorites: "favorites",
+    transparencyLimitHint: "Define exactly where the transparency begins and ends, with custom direction or center.",
   },
   it: {
     templates: "Modelli",
@@ -80,6 +81,7 @@ const translations: Record<string, Record<string, string>> = {
     from: "dai",
     to: "ai",
     favorites: "preferiti",
+    transparencyLimitHint: "Definisci esattamente dove la trasparenza inizia e finisce, con direzione o centro personalizzati.",
   },
 };
 

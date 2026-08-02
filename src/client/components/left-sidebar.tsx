@@ -20,7 +20,7 @@ import { ElementsLibraryV2 } from "./elements-library-v2";
 import { NativeShapesPanel } from "./native-shapes-panel";
 import { BrandKitPanel } from "./brand-kit-panel";
 import { ToolsPanel } from "./tools-panel";
-import translations from "../translations";
+import translations from "../../translations";
 import { config } from "../../server/config";
 
 type Section = "templates" | "elements" | "shapes" | "tools" | "brand" | "text" | "images" | "background" | "designs";

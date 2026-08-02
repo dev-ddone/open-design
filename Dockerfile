@@ -23,7 +23,7 @@ COPY --from=build --chown=app:app /app/package.json ./package.json
 COPY --from=build --chown=app:app /app/dist ./dist
 COPY --from=build --chown=app:app /app/src/server ./src/server
 COPY --from=build --chown=app:app /app/migrations ./migrations
-COPY . .
+COPY --from=build --chown=app:app /app/src/translations ./src/translations
 RUN install -d -o app -g app /app/data/uploads
 USER app
 EXPOSE 3006

@@ -8,7 +8,7 @@ import { placeObjectWithoutOverlap } from "../canvas/smart-placement";
 import { useEditor } from "../context";
 import type { DesignElement, ElementCategory, ElementProvider, ElementSearchResponse } from "../types";
 import { config } from "../../server/config";
-import translations from "../translations";
+import translations from "../../translations";
 
 const lang = config.lang;
 

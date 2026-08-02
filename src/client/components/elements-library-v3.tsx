@@ -38,7 +38,7 @@ import {
   type ElementsView,
 } from "../elements-library-model";
 import type { DesignElement, ElementCategory, ElementProvider, ElementSearchResponse } from "../types";
-import translations from "../translations";
+import translations from "../../translations";
 import { config } from "../../server/config";
 
 const lang = config.lang;
