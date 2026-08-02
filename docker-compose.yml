@@ -50,10 +50,13 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
       BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-DDone Admin}
       BOOTSTRAP_ORGANIZATION_NAME: ${BOOTSTRAP_ORGANIZATION_NAME:-DDone}
+      LANG: ${LANG:-en}
     volumes:
       - app_uploads:/app/data/uploads
     expose:
       - "3006"
+    ports:
+      - "3006:3006"
     depends_on:
       postgres:
         condition: service_healthy

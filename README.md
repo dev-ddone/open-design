@@ -123,6 +123,14 @@ S3_SECRET_KEY=replace-with-a-secure-minio-password
 BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-secure-password
 ```
+Optional:
+```env
+LANG=en
+```
+
+Available languages:
+- English (en)
+- Italian (it)
 
 Start the stack:
 

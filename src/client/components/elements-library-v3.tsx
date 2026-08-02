@@ -38,6 +38,10 @@ import {
   type ElementsView,
 } from "../elements-library-model";
 import type { DesignElement, ElementCategory, ElementProvider, ElementSearchResponse } from "../types";
+import translations from "../../translations";
+import { config } from "../../server/config";
+
+const lang = config.lang;
 
 const FAVORITES_KEY = "ddone_design_element_favorites_v3";
 const FAVORITE_ITEMS_KEY = "ddone_design_element_favorite_items_v1";
@@ -213,10 +217,10 @@ function AssetPreview({ element, color }: { element: DesignElement; color: strin
     : undefined;
 
   return (
-    <div class="h-full w-full overflow-hidden bg-zinc-100" style={checkerboard}>
+    <div class="bg-zinc-100 w-full h-full overflow-hidden" style={checkerboard}>
       {url
-        ? <img src={url} alt={element.name} class="h-full w-full object-contain" loading="lazy" />
-        : <div class="grid h-full w-full place-items-center text-zinc-300"><ImageIcon size={28} /></div>}
+        ? <img src={url} alt={element.name} class="w-full h-full object-contain" loading="lazy" />
+        : <div class="place-items-center grid w-full h-full text-zinc-300"><ImageIcon size={28} /></div>}
     </div>
   );
 }
@@ -245,23 +249,23 @@ function ElementCard({
   onBackground,
 }: ElementCardProps) {
   return (
-    <article class="relative overflow-visible rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:border-violet-300 hover:shadow-md">
-      <div class="relative aspect-[4/3] overflow-hidden rounded-t-xl bg-zinc-100">
+    <article class="relative bg-white shadow-sm hover:shadow-md border border-zinc-200 hover:border-violet-300 rounded-xl overflow-visible transition">
+      <div class="relative bg-zinc-100 rounded-t-xl aspect-4/3 overflow-hidden">
         <button
           type="button"
           disabled={importing}
           onClick={onInsert}
           aria-label={`Inserisci ${element.name}`}
-          class="h-full w-full border-0 bg-transparent p-0 cursor-pointer disabled:opacity-50"
+          class="bg-transparent disabled:opacity-50 p-0 border-0 w-full h-full cursor-pointer"
         >
           {importing
-            ? <div class="grid h-full place-items-center"><LoaderCircle size={22} class="animate-spin text-violet-600" /></div>
+            ? <div class="place-items-center grid h-full"><LoaderCircle size={22} class="text-violet-600 animate-spin" /></div>
             : <AssetPreview element={element} color={color} />}
         </button>
         <button
           type="button"
           onClick={onFavorite}
-          aria-label={favorite ? `Rimuovi ${element.name} dai preferiti` : `Aggiungi ${element.name} ai preferiti`}
+          aria-label={favorite ? `${translations[lang].remove} ${element.name} ${translations[lang].from} ${translations[lang].favorites}` : `${translations[lang].add} ${element.name} ${translations[lang].to} ${translations[lang].favorites}`}
           class={`absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-white/80 bg-white/95 shadow-sm cursor-pointer ${favorite ? "text-rose-500" : "text-zinc-500"}`}
         >
           <Heart size={12} fill={favorite ? "currentColor" : "none"} />
@@ -271,29 +275,29 @@ function ElementCard({
             type="button"
             onClick={onToggleMenu}
             aria-label={`Altre azioni per ${element.name}`}
-            class="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-white/80 bg-white/95 text-zinc-600 shadow-sm cursor-pointer"
+            class="top-2 right-2 absolute place-items-center grid bg-white/95 shadow-sm border border-white/80 rounded-full w-7 h-7 text-zinc-600 cursor-pointer"
           >
             <MoreHorizontal size={14} />
           </button>
         )}
         {menuOpen && (
-          <div class="absolute right-2 top-10 z-30 w-36 overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-xl">
+          <div class="top-10 right-2 z-30 absolute bg-white shadow-xl p-1 border border-zinc-200 rounded-lg w-36 overflow-hidden">
             {element.kind === "image" && (
-              <button type="button" onClick={onBackground} class="flex w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-2 text-left text-[9px] text-zinc-600 cursor-pointer hover:bg-zinc-100">
+              <button type="button" onClick={onBackground} class="flex items-center gap-2 bg-transparent hover:bg-zinc-100 px-2 py-2 border-0 rounded-md w-full text-[9px] text-zinc-600 text-left cursor-pointer">
                 <PaintBucket size={12} /> Usa come sfondo
               </button>
             )}
             {element.sourceUrl && (
-              <a href={element.sourceUrl} target="_blank" rel="noreferrer" class="flex items-center gap-2 rounded-md px-2 py-2 text-[9px] text-zinc-600 no-underline hover:bg-zinc-100">
+              <a href={element.sourceUrl} target="_blank" rel="noreferrer" class="flex items-center gap-2 hover:bg-zinc-100 px-2 py-2 rounded-md text-[9px] text-zinc-600 no-underline">
                 <ExternalLink size={12} /> Apri la fonte
               </a>
             )}
           </div>
         )}
       </div>
-      <div class="min-w-0 px-2.5 py-2">
-        <strong class="block truncate text-[10px] font-semibold text-zinc-800">{element.name}</strong>
-        <div class="mt-0.5 flex min-w-0 items-center gap-1 text-[8px] text-zinc-400">
+      <div class="px-2.5 py-2 min-w-0">
+        <strong class="block font-semibold text-[10px] text-zinc-800 truncate">{element.name}</strong>
+        <div class="flex items-center gap-1 mt-0.5 min-w-0 text-[8px] text-zinc-400">
           <span class="truncate">{element.providerLabel}</span>
           <span>·</span>
           <span class="shrink-0">{formatLabel(element)}</span>
@@ -530,7 +534,7 @@ export function ElementsLibraryV3() {
         : elements;
 
   const renderCards = (items: DesignElement[]) => (
-    <div class="grid grid-cols-2 gap-2.5">
+    <div class="gap-2.5 grid grid-cols-2">
       {items.map((element) => (
         <ElementCard
           key={element.id}
@@ -549,33 +553,33 @@ export function ElementsLibraryV3() {
   );
 
   return (
-    <div class="flex min-h-0 flex-col gap-3" data-testid="elements-library-v3">
+    <div class="flex flex-col gap-3 min-h-0" data-testid="elements-library-v3">
       <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} class="flex gap-2">
-        <div class="relative min-w-0 flex-1">
-          <Search size={15} class="absolute left-3 top-3 text-zinc-400" />
+        <div class="relative flex-1 min-w-0">
+          <Search size={15} class="top-3 left-3 absolute text-zinc-400" />
           <input
             value={searchInput}
-            onInput={(event) => setSearchInput((event.target as HTMLInputElement).value)}
-            placeholder="Cerca foto, cornici, icone…"
-            aria-label="Cerca elementi"
-            class="h-10 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-10 text-xs outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            onChange={(event) => setSearchInput((event.target as HTMLInputElement).value)}
+            placeholder={translations[lang].searchElementsPlaceholder}
+            aria-label={translations[lang].searchElements}
+            class="bg-white pr-10 pl-9 border border-zinc-200 focus:border-violet-400 rounded-xl outline-none focus:ring-2 focus:ring-violet-100 w-full h-10 text-xs transition"
           />
           {searchInput && (
-            <button type="button" onClick={() => { setSearchInput(""); if (submittedQuery) setSubmittedQuery(""); }} aria-label="Cancella ricerca" class="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-md border-0 bg-transparent text-zinc-400 cursor-pointer hover:bg-zinc-100">
+            <button type="button" onClick={() => { setSearchInput(""); if (submittedQuery) setSubmittedQuery(""); }} aria-label="Cancella ricerca" class="top-2 right-2 absolute place-items-center grid bg-transparent hover:bg-zinc-100 border-0 rounded-md w-6 h-6 text-zinc-400 cursor-pointer">
               <X size={13} />
             </button>
           )}
         </div>
-        <button type="submit" aria-label="Avvia ricerca elementi" class="grid h-10 w-10 shrink-0 place-items-center rounded-xl border-0 bg-violet-600 text-white shadow-sm cursor-pointer hover:bg-violet-700">
+        <button type="submit" aria-label="Avvia ricerca elementi" class="place-items-center grid bg-violet-600 hover:bg-violet-700 shadow-sm border-0 rounded-xl w-10 h-10 text-white cursor-pointer shrink-0">
           <Search size={15} />
         </button>
         <button type="button" onClick={() => setFilterOpen((current) => !current)} aria-label="Filtri elementi" aria-expanded={filterOpen} class={`relative grid h-10 w-10 shrink-0 place-items-center rounded-xl border cursor-pointer ${filterOpen || activeFilters ? "border-violet-300 bg-violet-50 text-violet-700" : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"}`}>
           <SlidersHorizontal size={15} />
-          {activeFilters && <span class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-violet-600" />}
+          {activeFilters && <span class="top-1.5 right-1.5 absolute bg-violet-600 rounded-full w-1.5 h-1.5" />}
         </button>
       </form>
 
-      <div role="tablist" aria-label="Viste della libreria" class="grid grid-cols-3 rounded-xl bg-zinc-100 p-1">
+      <div role="tablist" aria-label="Viste della libreria" class="grid grid-cols-3 bg-zinc-100 p-1 rounded-xl">
         {[
           { value: "discover" as const, label: "Esplora", icon: Compass },
           { value: "recent" as const, label: "Recenti", icon: Clock3 },
@@ -595,37 +599,37 @@ export function ElementsLibraryV3() {
       </div>
 
       {filterOpen && (
-        <section aria-label="Filtri elementi" class="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-          <div class="mb-3 flex items-center justify-between">
+        <section aria-label="Filtri elementi" class="bg-zinc-50 p-3 border border-zinc-200 rounded-xl">
+          <div class="flex justify-between items-center mb-3">
             <strong class="text-[10px] text-zinc-700">Filtri</strong>
-            <button type="button" onClick={resetFilters} class="flex items-center gap-1 border-0 bg-transparent text-[8px] text-zinc-500 cursor-pointer hover:text-violet-700"><RotateCcw size={11} /> Ripristina</button>
+            <button type="button" onClick={resetFilters} class="flex items-center gap-1 bg-transparent border-0 text-[8px] text-zinc-500 hover:text-violet-700 cursor-pointer"><RotateCcw size={11} /> Ripristina</button>
           </div>
-          <div class="grid gap-2">
-            <label class="grid gap-1 text-[8px] font-medium text-zinc-500">
+          <div class="gap-2 grid">
+            <label class="gap-1 grid font-medium text-[8px] text-zinc-500">
               Categoria
-              <select value={category} onChange={(event) => { setCategory((event.target as HTMLSelectElement).value as ElementCategory); setView("discover"); }} class="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] text-zinc-700 outline-none">
+              <select value={category} onChange={(event) => { setCategory((event.target as HTMLSelectElement).value as ElementCategory); setView("discover"); }} class="bg-white px-2 border border-zinc-200 rounded-lg outline-none h-9 text-[10px] text-zinc-700">
                 {ELEMENT_CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
-            <label class="grid gap-1 text-[8px] font-medium text-zinc-500">
+            <label class="gap-1 grid font-medium text-[8px] text-zinc-500">
               Formato
-              <select value={format} onChange={(event) => { setFormat((event.target as HTMLSelectElement).value as ElementsFormatFilter); setView("discover"); }} class="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] text-zinc-700 outline-none">
+              <select value={format} onChange={(event) => { setFormat((event.target as HTMLSelectElement).value as ElementsFormatFilter); setView("discover"); }} class="bg-white px-2 border border-zinc-200 rounded-lg outline-none h-9 text-[10px] text-zinc-700">
                 {ELEMENT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
-            <label class="grid gap-1 text-[8px] font-medium text-zinc-500">
+            <label class="gap-1 grid font-medium text-[8px] text-zinc-500">
               Fonte
-              <select value={provider} onChange={(event) => { setProvider((event.target as HTMLSelectElement).value); setView("discover"); }} class="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] text-zinc-700 outline-none">
+              <select value={provider} onChange={(event) => { setProvider((event.target as HTMLSelectElement).value); setView("discover"); }} class="bg-white px-2 border border-zinc-200 rounded-lg outline-none h-9 text-[10px] text-zinc-700">
                 <option value="all">Tutte le fonti attive</option>
                 {providerSummary.enabled.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
-            <label class="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-[8px] font-medium text-zinc-500">
+            <label class="flex justify-between items-center bg-white px-2.5 py-2 border border-zinc-200 rounded-lg font-medium text-[8px] text-zinc-500">
               Colore iniziale degli SVG
-              <input type="color" value={color} onInput={(event) => setColor((event.target as HTMLInputElement).value)} class="h-7 w-9 rounded border border-zinc-200 bg-transparent p-0 cursor-pointer" />
+              <input type="color" value={color} onInput={(event) => setColor((event.target as HTMLInputElement).value)} class="bg-transparent p-0 border border-zinc-200 rounded w-9 h-7 cursor-pointer" />
             </label>
           </div>
-          <div class="mt-2 rounded-lg bg-white px-2.5 py-2 text-[8px] leading-relaxed text-zinc-400">
+          <div class="bg-white mt-2 px-2.5 py-2 rounded-lg text-[8px] text-zinc-400 leading-relaxed">
             <span class="font-semibold text-emerald-600">{providerSummary.enabled.length} fonti attive</span>
             {providerSummary.disabled.length > 0 && <span> · Da configurare: {providerSummary.disabled.map((item) => item.label).join(", ")}</span>}
           </div>
@@ -634,17 +638,17 @@ export function ElementsLibraryV3() {
 
       {view === "discover" && landing && (
         <section>
-          <div class="mb-2 flex items-end justify-between">
+          <div class="flex justify-between items-end mb-2">
             <div><strong class="block text-[11px] text-zinc-800">Cosa vuoi creare?</strong><span class="text-[8px] text-zinc-400">Scegli una raccolta oppure cerca direttamente.</span></div>
             <span class="text-[8px] text-zinc-400">{providerSummary.enabled.length || "–"} fonti</span>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="gap-2 grid grid-cols-2">
             {ELEMENT_COLLECTIONS.map((collection) => {
               const Icon = COLLECTION_ICONS[collection.icon];
               return (
-                <button key={collection.id} type="button" onClick={() => openCollection(collection)} class="flex min-h-16 items-center gap-2.5 rounded-xl border border-zinc-200 bg-white p-2.5 text-left cursor-pointer transition hover:border-violet-300 hover:bg-violet-50/40">
-                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-100 text-violet-600"><Icon size={17} /></span>
-                  <span class="min-w-0"><strong class="block text-[9px] text-zinc-800">{collection.label}</strong><span class="mt-0.5 block text-[7px] leading-relaxed text-zinc-400">{collection.detail}</span></span>
+                <button key={collection.id} type="button" onClick={() => openCollection(collection)} class="flex items-center gap-2.5 bg-white hover:bg-violet-50/40 p-2.5 border border-zinc-200 hover:border-violet-300 rounded-xl min-h-16 text-left transition cursor-pointer">
+                  <span class="place-items-center grid bg-zinc-100 rounded-lg w-9 h-9 text-violet-600 shrink-0"><Icon size={17} /></span>
+                  <span class="min-w-0"><strong class="block text-[9px] text-zinc-800">{collection.label}</strong><span class="block mt-0.5 text-[7px] text-zinc-400 leading-relaxed">{collection.detail}</span></span>
                 </button>
               );
             })}
@@ -653,7 +657,7 @@ export function ElementsLibraryV3() {
       )}
 
       <section class="min-h-0">
-        <div class="mb-2 flex items-center justify-between gap-2">
+        <div class="flex justify-between items-center gap-2 mb-2">
           <div>
             <strong class="block text-[11px] text-zinc-800">
               {view === "recent" ? "Usati di recente" : view === "favorites" ? "I tuoi preferiti" : landing ? "In evidenza" : "Risultati"}
@@ -663,27 +667,27 @@ export function ElementsLibraryV3() {
             </span>
           </div>
           {view === "discover" && activeFilters && (
-            <button type="button" onClick={resetFilters} class="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[8px] text-zinc-500 cursor-pointer hover:border-violet-300">Mostra tutto</button>
+            <button type="button" onClick={resetFilters} class="bg-white px-2 py-1 border border-zinc-200 hover:border-violet-300 rounded-lg text-[8px] text-zinc-500 cursor-pointer">{translations[lang].showAll}</button>
           )}
         </div>
 
         {loading && view === "discover" && (
-          <div class="grid grid-cols-2 gap-2.5">
-            {[0, 1, 2, 3].map((item) => <div key={item} class="aspect-[4/3] animate-pulse rounded-xl bg-zinc-100" />)}
+          <div class="gap-2.5 grid grid-cols-2">
+            {[0, 1, 2, 3].map((item) => <div key={item} class="bg-zinc-100 rounded-xl aspect-4/3 animate-pulse" />)}
           </div>
         )}
-        {error && <div class="mb-2 rounded-lg border border-red-100 bg-red-50 p-2 text-[9px] text-red-600">{error}</div>}
-        {warnings.length > 0 && view === "discover" && <div class="mb-2 rounded-lg border border-amber-100 bg-amber-50 p-2 text-[8px] leading-relaxed text-amber-700">Alcune fonti non hanno risposto: {warnings.join(" · ")}</div>}
+        {error && <div class="bg-red-50 mb-2 p-2 border border-red-100 rounded-lg text-[9px] text-red-600">{error}</div>}
+        {warnings.length > 0 && view === "discover" && <div class="bg-amber-50 mb-2 p-2 border border-amber-100 rounded-lg text-[8px] text-amber-700 leading-relaxed">{translations[lang].unresponsiveSources}: {warnings.join(" · ")}</div>}
         {(!loading || view !== "discover") && displayedItems.length > 0 && renderCards(displayedItems)}
         {(!loading || view !== "discover") && displayedItems.length === 0 && (
-          <div class="rounded-xl border border-dashed border-zinc-200 px-4 py-8 text-center">
+          <div class="px-4 py-8 border border-zinc-200 border-dashed rounded-xl text-center">
             <Sparkles size={22} class="mx-auto text-zinc-300" />
-            <strong class="mt-2 block text-[10px] text-zinc-500">Nessun elemento qui</strong>
-            <span class="mt-1 block text-[8px] text-zinc-400">Cambia ricerca o torna a Esplora.</span>
+            <strong class="block mt-2 text-[10px] text-zinc-500">Nessun elemento qui</strong>
+            <span class="block mt-1 text-[8px] text-zinc-400">Cambia ricerca o torna a Esplora.</span>
           </div>
         )}
         {view === "discover" && !loading && nextPage && !landing && (
-          <button type="button" disabled={loadingMore} onClick={() => void runSearch(page + 1, true)} class="mt-3 h-9 w-full rounded-xl border border-zinc-200 bg-white text-[9px] font-semibold text-zinc-600 cursor-pointer hover:border-violet-300 disabled:opacity-50">
+          <button type="button" disabled={loadingMore} onClick={() => void runSearch(page + 1, true)} class="bg-white disabled:opacity-50 mt-3 border border-zinc-200 hover:border-violet-300 rounded-xl w-full h-9 font-semibold text-[9px] text-zinc-600 cursor-pointer">
             {loadingMore ? <span class="inline-flex items-center gap-1.5"><LoaderCircle size={12} class="animate-spin" /> Caricamento…</span> : "Carica altri risultati"}
           </button>
         )}

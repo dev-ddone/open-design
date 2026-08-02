@@ -52,6 +52,7 @@ export const config = {
   registrationEnabled: bool(process.env.REGISTRATION_ENABLED, true),
   passwordResetTtlMinutes: int(process.env.PASSWORD_RESET_TTL_MINUTES, 30),
   invitationTtlHours: int(process.env.INVITATION_TTL_HOURS, 72),
+  lang: process.env.LANG ?? "en",
   email: {
     delivery: emailDelivery,
     host: process.env.SMTP_HOST,

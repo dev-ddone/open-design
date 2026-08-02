@@ -14,6 +14,9 @@ import {
   localPackSvg,
   searchLocalAssetPacks,
 } from "./local-asset-packs.js";
+import translations from "../translations/index.js";
+
+const lang = config.lang;
 
 interface ProviderInfo {
   id: string;
@@ -608,7 +611,7 @@ catalog.get("/api/elements-universe/search", requireAuth, requireOrganization, a
   settled.forEach((result, index) => {
     if (result.status === "fulfilled") items.push(...result.value);
     else {
-      warnings.push(`${jobs[index].provider} non è temporaneamente disponibile`);
+      warnings.push(`${jobs[index].provider} ${translations[lang].temporarilyUnavailable}`);
       console.warn(`Element provider ${jobs[index].provider} failed`, result.reason);
     }
   });

@@ -20,19 +20,23 @@ import { ElementsLibraryV2 } from "./elements-library-v2";
 import { NativeShapesPanel } from "./native-shapes-panel";
 import { BrandKitPanel } from "./brand-kit-panel";
 import { ToolsPanel } from "./tools-panel";
+import translations from "../../translations";
+import { config } from "../../server/config";
 
 type Section = "templates" | "elements" | "shapes" | "tools" | "brand" | "text" | "images" | "background" | "designs";
 
+const lang = config.lang;
+
 const SECTIONS: { key: Section; icon: typeof LayoutGrid; label: string; editing: boolean }[] = [
-  { key: "templates", icon: LayoutGrid, label: "Modelli", editing: true },
-  { key: "elements", icon: Shapes, label: "Elementi", editing: true },
-  { key: "shapes", icon: CircleDashed, label: "Forme", editing: true },
-  { key: "text", icon: Type, label: "Testo", editing: true },
-  { key: "brand", icon: SwatchBook, label: "Brand", editing: true },
-  { key: "images", icon: Upload, label: "Caricamenti", editing: true },
-  { key: "tools", icon: WandSparkles, label: "Strumenti", editing: true },
-  { key: "designs", icon: FolderOpen, label: "Progetti", editing: false },
-  { key: "background", icon: Palette, label: "Sfondo", editing: true },
+  { key: "templates", icon: LayoutGrid, label: translations[lang].templates, editing: true },
+  { key: "elements", icon: Shapes, label: translations[lang].elements, editing: true },
+  { key: "shapes", icon: CircleDashed, label: translations[lang].shapes, editing: true },
+  { key: "text", icon: Type, label: translations[lang].text, editing: true },
+  { key: "brand", icon: SwatchBook, label: translations[lang].brand, editing: true },
+  { key: "images", icon: Upload, label: translations[lang].images, editing: true },
+  { key: "tools", icon: WandSparkles, label: translations[lang].tools, editing: true },
+  { key: "designs", icon: FolderOpen, label: translations[lang].designs, editing: false },
+  { key: "background", icon: Palette, label: translations[lang].background, editing: true },
 ];
 
 const SECTION_TITLES: Record<Section, string> = {
@@ -174,15 +178,15 @@ export function LeftSidebar() {
 
   return (
     <aside class="flex flex-row shrink-0">
-      <div class="w-[76px] bg-white border-r border-zinc-200 flex flex-col items-center pt-2 gap-0.5 shrink-0 overflow-y-auto">
+      <div class="flex flex-col items-center gap-0.5 bg-white pt-2 border-zinc-200 border-r w-19 overflow-y-auto shrink-0">
         {SECTIONS.map((section) => {
           const disabled = section.editing && !canEdit;
           return (
             <button
               key={section.key}
               disabled={disabled}
-              title={disabled ? "Accesso in sola visualizzazione" : section.label}
-              class={`flex flex-col items-center justify-center gap-1 w-[64px] min-h-[58px] shrink-0 rounded-xl bg-transparent border-none transition-all ${
+              title={disabled ? translations[lang].viewOnly : section.label}
+              class={`flex flex-col items-center justify-center gap-1 w-16 min-h-14.5 shrink-0 rounded-xl bg-transparent border-none transition-all ${
                 disabled
                   ? "text-zinc-300 cursor-not-allowed"
                   : activeSection === section.key
@@ -192,25 +196,25 @@ export function LeftSidebar() {
               onClick={() => handleSectionClick(section)}
             >
               <section.icon size={20} />
-              <span class="text-[9px] leading-tight text-center">{section.label}</span>
+              <span class="text-[9px] text-center leading-tight">{section.label}</span>
             </button>
           );
         })}
       </div>
 
-      <div class="bg-white border-r border-zinc-200 overflow-hidden transition-all duration-200 ease-in-out" style={{ width: activeSection ? "350px" : "0px" }}>
-        <div class="w-[350px] h-full flex flex-col">
+      <div class="bg-white border-zinc-200 border-r overflow-hidden transition-all duration-200 ease-in-out" style={{ width: activeSection ? "350px" : "0px" }}>
+        <div class="flex flex-col w-87.5 h-full">
           {activeSection && (
             <>
-              <div class="px-4 pt-3 pb-2 shrink-0 flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-zinc-900 m-0">{SECTION_TITLES[activeSection]}</h2>
-                {!canEdit && <span class="text-[9px] rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-400">VIEW ONLY</span>}
+              <div class="flex justify-between items-center px-4 pt-3 pb-2 shrink-0">
+                <h2 class="m-0 font-semibold text-zinc-900 text-sm">{translations[lang][activeSection]}</h2>
+                {!canEdit && <span class="bg-zinc-100 px-1.5 py-0.5 rounded text-[9px] text-zinc-400">VIEW ONLY</span>}
               </div>
-              <div class="flex-1 overflow-y-auto px-4 pb-4">
+              <div class="flex-1 px-4 pb-4 overflow-y-auto">
                 {activeSection === "templates" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-3">Applica un layout riutilizzabile. Il lavoro esistente viene prima versionato.</p>
-                    <div class="grid grid-cols-2 gap-2">
+                    <p class="mb-3 text-[11px] text-zinc-400">{translations[lang].applyReusableLayout}</p>
+                    <div class="gap-2 grid grid-cols-2">
                       {templates.map((template) => (
                         <div key={template.id} class={applyingTemplateId === template.id ? "opacity-50 pointer-events-none" : ""}>
                           <TemplateCard template={template} onClick={() => void applyTemplate(template)} />
@@ -227,15 +231,15 @@ export function LeftSidebar() {
 
                 {activeSection === "text" && (
                   <div class="flex flex-col gap-2">
-                    <p class="text-zinc-400 text-[11px] mb-1">Aggiungi un blocco di testo</p>
+                    <p class="mb-1 text-[11px] text-zinc-400">Aggiungi un blocco di testo</p>
                     {[
-                      { preset: "heading" as const, label: "Aggiungi un titolo", detail: "Montserrat Bold, 48 px", className: "text-lg font-bold" },
-                      { preset: "subheading" as const, label: "Aggiungi un sottotitolo", detail: "Inter Medium, 32 px", className: "text-sm font-medium" },
-                      { preset: "body" as const, label: "Aggiungi testo", detail: "Inter Regular, 18 px", className: "text-xs" },
+                      { preset: "heading" as const, label: translations[lang].addHeading, detail: "Montserrat Bold, 48 px", className: "text-lg font-bold" },
+                      { preset: "subheading" as const, label: translations[lang].addSubheading, detail: "Inter Medium, 32 px", className: "text-sm font-medium" },
+                      { preset: "body" as const, label: translations[lang].addBody, detail: "Inter Regular, 18 px", className: "text-xs" },
                     ].map((item) => (
-                      <button key={item.preset} disabled={!canEdit} class="w-full text-left p-3 rounded-xl bg-white border border-zinc-200 cursor-pointer transition-all hover:border-violet-300 hover:bg-violet-50/40 group disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => addText(item.preset)}>
+                      <button key={item.preset} disabled={!canEdit} class="group bg-white hover:bg-violet-50/40 disabled:opacity-50 p-3 border border-zinc-200 hover:border-violet-300 rounded-xl w-full text-left transition-all cursor-pointer disabled:cursor-not-allowed" onClick={() => addText(item.preset)}>
                         <span class={`${item.className} text-zinc-900 group-hover:text-violet-700 transition-colors`}>{item.label}</span>
-                        <span class="block text-[10px] text-zinc-400 mt-0.5">{item.detail}</span>
+                        <span class="block mt-0.5 text-[10px] text-zinc-400">{item.detail}</span>
                       </button>
                     ))}
                   </div>
@@ -243,11 +247,11 @@ export function LeftSidebar() {
 
                 {activeSection === "images" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Carica immagini nella libreria privata del cliente</p>
-                    <div class="border-2 border-dashed border-zinc-300 rounded-xl p-7 text-center cursor-pointer transition-all hover:border-violet-400 hover:bg-violet-50" onClick={() => canEdit && fileInputRef.current?.click()} onDrop={(event) => { event.preventDefault(); void handleImageUpload(event.dataTransfer?.files ?? null); }} onDragOver={(event) => event.preventDefault()}>
-                      <Upload size={25} class="text-zinc-400 mx-auto mb-2" />
-                      <p class="text-xs text-zinc-500">{uploading ? "Caricamento…" : "Clicca o trascina qui"}</p>
-                      <p class="text-[10px] text-zinc-400 mt-1">PNG, JPG, SVG, WebP · massimo 25 MB</p>
+                    <p class="mb-2 text-[11px] text-zinc-400">{translations[lang].uploadImages}</p>
+                    <div class="hover:bg-violet-50 p-7 border-2 border-zinc-300 hover:border-violet-400 border-dashed rounded-xl text-center transition-all cursor-pointer" onClick={() => canEdit && fileInputRef.current?.click()} onDrop={(event) => { event.preventDefault(); void handleImageUpload(event.dataTransfer?.files ?? null); }} onDragOver={(event) => event.preventDefault()}>
+                      <Upload size={25} class="mx-auto mb-2 text-zinc-400" />
+                      <p class="text-zinc-500 text-xs">{uploading ? translations[lang].loading : translations[lang].clickOrDrag}</p>
+                      <p class="mt-1 text-[10px] text-zinc-400">PNG, JPG, SVG, WebP · massimo 25 MB</p>
                     </div>
                     <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple class="hidden" onChange={(event) => void handleImageUpload((event.target as HTMLInputElement).files)} />
                   </div>
@@ -255,17 +259,17 @@ export function LeftSidebar() {
 
                 {activeSection === "background" && (
                   <div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Colori uniformi</p>
-                    <div class="grid grid-cols-4 gap-2 mb-4">
-                      {BG_COLORS.map((color) => <button key={color} class="w-full aspect-square rounded-lg border border-zinc-300 cursor-pointer transition-all hover:scale-105 hover:border-violet-400" style={{ background: color }} onClick={() => setBackground("color", color)} />)}
+                    <p class="mb-2 text-[11px] text-zinc-400">{translations[lang].uniformColor}</p>
+                    <div class="gap-2 grid grid-cols-4 mb-4">
+                      {BG_COLORS.map((color) => <button key={color} class="border border-zinc-300 hover:border-violet-400 rounded-lg w-full aspect-square hover:scale-105 transition-all cursor-pointer" style={{ background: color }} onClick={() => setBackground("color", color)} />)}
                     </div>
-                    <p class="text-zinc-400 text-[11px] mb-2">Colore personalizzato</p>
-                    <input type="color" class="w-full h-9 rounded-lg border border-zinc-300 cursor-pointer bg-transparent" onChange={(event) => setBackground("color", (event.target as HTMLInputElement).value)} />
-                    <p class="text-zinc-400 text-[11px] mb-2 mt-4">Gradienti</p>
-                    <div class="grid grid-cols-3 gap-2 mb-4">
-                      {GRADIENT_PRESETS.map((gradient) => <button key={gradient} class="w-full aspect-square rounded-lg border border-zinc-300 cursor-pointer transition-all hover:scale-105 hover:border-violet-400" style={{ background: gradient }} onClick={() => setBackground("gradient", gradient)} />)}
+                    <p class="mb-2 text-[11px] text-zinc-400">{translations[lang].customColor}</p>
+                    <input type="color" class="bg-transparent border border-zinc-300 rounded-lg w-full h-9 cursor-pointer" onChange={(event) => setBackground("color", (event.target as HTMLInputElement).value)} />
+                    <p class="mt-4 mb-2 text-[11px] text-zinc-400">Gradienti</p>
+                    <div class="gap-2 grid grid-cols-3 mb-4">
+                      {GRADIENT_PRESETS.map((gradient) => <button key={gradient} class="border border-zinc-300 hover:border-violet-400 rounded-lg w-full aspect-square hover:scale-105 transition-all cursor-pointer" style={{ background: gradient }} onClick={() => setBackground("gradient", gradient)} />)}
                     </div>
-                    <button class="w-full p-3 rounded-xl bg-white border border-zinc-200 cursor-pointer text-xs text-zinc-500 hover:border-violet-300 hover:text-zinc-800 transition-all" onClick={() => bgFileRef.current?.click()}><Upload size={14} class="inline mr-1.5" /> Carica immagine di sfondo</button>
+                    <button class="bg-white p-3 border border-zinc-200 hover:border-violet-300 rounded-xl w-full text-zinc-500 hover:text-zinc-800 text-xs transition-all cursor-pointer" onClick={() => bgFileRef.current?.click()}><Upload size={14} class="inline mr-1.5" /> Carica immagine di sfondo</button>
                     <input ref={bgFileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden" onChange={(event) => void handleBackgroundUpload((event.target as HTMLInputElement).files)} />
                   </div>
                 )}
